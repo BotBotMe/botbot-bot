@@ -4,6 +4,6 @@ go:
   - 1.1
 
 install:
-  - go get github.com/bmizerany/pq github.com/monnand/goredis
+  - go get github.com/lincolnloop/botbot-bot
 
-script: go test
+script: go test github.com/lincolnloop/botbot-bot

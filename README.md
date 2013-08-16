@@ -1,9 +1,6 @@
-The bot used in botbot.me. To build:
+The bot used in botbot.me. To install:
 
-```
-go get github.com/bmizerany/pq github.com/monnand/goredis
-go install botbot-bot
-```
+    go get github.com/lincolnloop/botbot-bot
 
 External resources:
 
