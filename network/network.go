@@ -3,9 +3,9 @@ package network
 import (
 
 	// local packages
-	"botbot-bot/common"
-	"botbot-bot/line"
-	"botbot-bot/network/irc"
+	"github.com/lincolnloop/botbot-bot/common"
+	"github.com/lincolnloop/botbot-bot/line"
+	"github.com/lincolnloop/botbot-bot/network/irc"
 
 	// stdlib package
 	"log"

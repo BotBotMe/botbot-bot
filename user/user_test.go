@@ -1,7 +1,7 @@
 package user
 
 import (
-	"botbot-bot/line"
+	"github.com/lincolnloop/botbot-bot/line"
 	"testing"
 )
 

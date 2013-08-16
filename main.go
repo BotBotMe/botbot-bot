@@ -11,11 +11,11 @@ import (
 	"github.com/monnand/goredis"
 
 	// local packages
-	"botbot-bot/common"
-	"botbot-bot/dispatch"
-	"botbot-bot/line"
-	"botbot-bot/network"
-	"botbot-bot/user"
+	"github.com/lincolnloop/botbot-bot/common"
+	"github.com/lincolnloop/botbot-bot/dispatch"
+	"github.com/lincolnloop/botbot-bot/line"
+	"github.com/lincolnloop/botbot-bot/network"
+	"github.com/lincolnloop/botbot-bot/user"
 
 	// stdlib package
 	"database/sql"

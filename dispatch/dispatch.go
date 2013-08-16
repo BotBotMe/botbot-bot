@@ -1,8 +1,8 @@
 package dispatch
 
 import (
-	"botbot-bot/common"
-	"botbot-bot/line"
+	"github.com/lincolnloop/botbot-bot/common"
+	"github.com/lincolnloop/botbot-bot/line"
 	"log"
 )
 
