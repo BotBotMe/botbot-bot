@@ -14,7 +14,7 @@ Configuration is handled via environment variables:
 
 ## Architecture
 
-Execution starts in `main.g`o, in function `main`. That starts the chatbots (via `NetworkManager`), the goroutine which listens for commands from Redis, and the `mainLoop` goroutine, then waits for a Ctrl-C or kill to quit.
+Execution starts in `main.go`, in function `main`. That starts the chatbots (via `NetworkManager`), the goroutine which listens for commands from Redis, and the `mainLoop` goroutine, then waits for a Ctrl-C or kill to quit.
 
 The core of the bot is in `mainLoop` (`main.go`). That listens to two Go channels, `fromServer` and `fromBus`. `fromServer` receives everything coming in from IRC. `fromBus` receives commands from the plugins, sent via a Redis list.
 
