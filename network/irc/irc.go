@@ -347,7 +347,7 @@ func (self *ircBot) sendPassword() {
 func (self *ircBot) sender() {
 
 	var data []byte
-	var quarterSecond = time.Second / 4
+	var twoSeconds = time.Second * 2
 	var err error
 
 	for self.isRunning {
@@ -363,8 +363,9 @@ func (self *ircBot) sender() {
 			self.Close()
 		}
 
-		// Rate limit to 4 messages a second
-		time.Sleep(quarterSecond)
+		// Rate limit to one message every 2 seconds
+		// https://github.com/lincolnloop/botbot-bot/issues/2
+		time.Sleep(twoSeconds)
 	}
 }
 
