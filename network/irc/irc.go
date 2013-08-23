@@ -9,12 +9,12 @@
 package irc
 
 import (
-	"github.com/lincolnloop/botbot-bot/common"
-	"github.com/lincolnloop/botbot-bot/line"
 	"bufio"
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"github.com/lincolnloop/botbot-bot/common"
+	"github.com/lincolnloop/botbot-bot/line"
 	"io"
 	"log"
 	"net"

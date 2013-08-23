@@ -110,15 +110,6 @@ func (self *MockIRCServer) Run(t *testing.T) {
 		t.Error("Error on IRC server on Accept. ", err)
 	}
 
-	// The first connection will be TLS. Reject it and listen for the next one.
-	conn.Close()
-
-	// Accept a single connection
-	conn, lerr = listener.Accept()
-	if lerr != nil {
-		t.Error("Error on IRC server on Accept. ", err)
-	}
-
 	// First message triggers BotBot to send USER and NICK messages
 	conn.Write([]byte(":hybrid7.debian.local NOTICE AUTH :*** Looking up your hostname...\n"))
 
