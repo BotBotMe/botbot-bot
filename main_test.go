@@ -69,7 +69,7 @@ func waitForServer(target *common.MockIRCServer, val int) {
 
 	tries := 0
 	for len(target.Got) < val && tries < 30 {
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 		tries++
 	}
 }
