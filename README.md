@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/lincolnloop/botbot-bot.png)](https://travis-ci.org/lincolnloop/botbot-bot)
+
 The bot used in botbot.me. To install:
 
     go get github.com/lincolnloop/botbot-bot
