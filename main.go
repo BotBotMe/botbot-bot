@@ -34,9 +34,9 @@ func main() {
 	storage := NewPostgresStorage()
 	defer storage.Close()
 	redisUrlString := os.Getenv("REDIS_PLUGIN_QUEUE_URL")
-    if redisUrlString == "" {
-        redisUrlString = "redis://localhost:6379/0"
-    }
+	if redisUrlString == "" {
+		redisUrlString = "redis://localhost:6379/0"
+	}
 	redisUrl, err := nurl.Parse(redisUrlString)
 	if err != nil {
 		log.Fatal("Could not read Redis string", err)
@@ -228,13 +228,13 @@ type PostgresStorage struct {
 func NewPostgresStorage() *PostgresStorage {
 	postgresUrlString := os.Getenv("DATABASE_URL")
 	if postgresUrlString == "" {
-        postgresUrlString = "postgres://localhost/botbot"
-    }
+		postgresUrlString = "postgres://localhost/botbot"
+	}
 	dataSource, err := pq.ParseURL(postgresUrlString)
 	if err != nil {
 		log.Fatal("Could not read database string", err)
 	}
-	db, err := sql.Open("postgres", dataSource + " sslmode=disable")
+	db, err := sql.Open("postgres", dataSource+" sslmode=disable")
 	if err != nil {
 		log.Fatal("Could not connect to database.", err)
 	}
