@@ -27,6 +27,11 @@ import (
 	"syscall"
 )
 
+const (
+	// Prefix of Redis channel to listen for messages on
+	LISTEN_QUEUE_PREFIX   = "bot"
+)
+
 func main() {
 
 	log.Println("START. Use 'botbot -help' for command line options.")
@@ -47,7 +52,7 @@ func main() {
 	botbot := NewBotBot(storage, queue)
 
 	// Listen for incoming commands
-	go botbot.listen(redisUrl.Path[1:])
+	go botbot.listen(LISTEN_QUEUE_PREFIX)
 
 	// Start the main loop
 	go botbot.mainLoop()
