@@ -23,31 +23,3 @@ type BotConfig struct {
 	// That means we can pass the string straight to JOIN and it works
 	Channels []string
 }
-
-// Message queue
-type Queue interface {
-
-	// Publish 'message' on 'queue' (Redis calls it 'channel')
-	Publish(queue string, message []byte) error
-
-	// Append item to the end (right) of a list. Creates the list if needed.
-	Rpush(key string, val []byte) error
-
-	// Blocking Pop from one or more Redis lists
-	Blpop(keys []string, timeoutsecs uint) (*string, []byte, error)
-
-	// Check if queue is available. First return arg is "PONG".
-	Ping() (string, error)
-
-	// List length
-	Llen(string) (int, error)
-
-	// Trim list to given range
-	Ltrim(string, int, int) error
-}
-
-// Storage. Wraps the database
-type Storage interface {
-	BotConfig() []*BotConfig
-	SetCount(string, int) error
-}
