@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/bmizerany/pq"
-	"github.com/lincolnloop/botbot-bot/common"
 )
 
 // Storage. Wraps the database
@@ -72,12 +71,12 @@ func NewPostgresStorage() *PostgresStorage {
 	return &PostgresStorage{db}
 }
 
-func (self *PostgresStorage) BotConfig() []*common.BotConfig {
+func (self *PostgresStorage) BotConfig() []*BotConfig {
 
 	var err error
 	var rows *sql.Rows
 
-	configs := make([]*common.BotConfig, 0)
+	configs := make([]*BotConfig, 0)
 
 	sql := "SELECT id, server, server_password, nick, password, real_name FROM bots_chatbot WHERE is_active=true"
 	rows, err = self.db.Query(sql)
@@ -99,7 +98,7 @@ func (self *PostgresStorage) BotConfig() []*common.BotConfig {
 			"realname":        string(real_name),
 		}
 
-		config := &common.BotConfig{
+		config := &BotConfig{
 			Id:       chatbotId,
 			Config:   confMap,
 			Channels: make([]string, 0),

@@ -1,5 +1,15 @@
 package common
 
+import (
+	"log"
+	"net"
+	"net/url"
+	"os"
+	"time"
+
+	"github.com/monnand/goredis"
+)
+
 // Message queue
 type Queue interface {
 
@@ -64,4 +74,123 @@ func (self *MockQueue) Ltrim(key string, start int, end int) error {
 
 func (self *MockQueue) Ping() (string, error) {
 	return "PONG", nil
+}
+
+/*
+ * REDIS WRAPPER
+ * Survives Redis restarts, waits for Redis to be available.
+ * Implements common.Queue
+ */
+type RedisQueue struct {
+	queue Queue
+}
+
+func NewRedisQueue() Queue {
+	redisUrlString := os.Getenv("REDIS_PLUGIN_QUEUE_URL")
+	if redisUrlString == "" {
+		redisUrlString = "redis://localhost:6379/0"
+	}
+	redisUrl, err := url.Parse(redisUrlString)
+	if err != nil {
+		log.Fatal("Could not read Redis string", err)
+	}
+	redisQueue := goredis.Client{Addr: redisUrl.Host}
+	s := RedisQueue{queue: &redisQueue}
+	s.waitForRedis()
+	return &s
+}
+
+func (self *RedisQueue) waitForRedis() {
+
+	_, err := self.queue.Ping()
+	for err != nil {
+		log.Println("Waiting for redis...")
+		time.Sleep(1 * time.Second)
+
+		_, err = self.queue.Ping()
+	}
+}
+
+func (self *RedisQueue) Publish(queue string, message []byte) error {
+
+	err := self.queue.Publish(queue, message)
+	if err == nil {
+		return nil
+	}
+
+	netErr := err.(net.Error)
+	if netErr.Timeout() || netErr.Temporary() {
+		return err
+	}
+
+	self.waitForRedis()
+	return self.Publish(queue, message) // Recurse
+}
+
+func (self *RedisQueue) Blpop(keys []string, timeoutsecs uint) (*string, []byte, error) {
+
+	key, val, err := self.queue.Blpop(keys, timeoutsecs)
+	if err == nil {
+		return key, val, nil
+	}
+
+	netErr := err.(net.Error)
+	if netErr.Timeout() || netErr.Temporary() {
+		return key, val, err
+	}
+
+	self.waitForRedis()
+	return self.Blpop(keys, timeoutsecs) // Recurse
+}
+
+func (self *RedisQueue) Rpush(key string, val []byte) error {
+
+	err := self.queue.Rpush(key, val)
+	if err == nil {
+		return nil
+	}
+
+	netErr := err.(net.Error)
+	if netErr.Timeout() || netErr.Temporary() {
+		return err
+	}
+
+	self.waitForRedis()
+	return self.Rpush(key, val) // Recurse
+}
+
+func (self *RedisQueue) Llen(key string) (int, error) {
+
+	size, err := self.queue.Llen(key)
+	if err == nil {
+		return size, nil
+	}
+
+	netErr := err.(net.Error)
+	if netErr.Timeout() || netErr.Temporary() {
+		return size, err
+	}
+
+	self.waitForRedis()
+	return self.Llen(key) // Recurse
+}
+
+func (self *RedisQueue) Ltrim(key string, start int, end int) error {
+
+	err := self.queue.Ltrim(key, start, end)
+	if err == nil {
+		return nil
+	}
+
+	netErr := err.(net.Error)
+	if netErr.Timeout() || netErr.Temporary() {
+		return err
+	}
+
+	self.waitForRedis()
+	return self.Ltrim(key, start, end) // Recurse
+}
+
+func (self *RedisQueue) Ping() (string, error) {
+	return self.queue.Ping()
 }
