@@ -55,9 +55,9 @@ type PostgresStorage struct {
 
 // Connect to the database.
 func NewPostgresStorage() *PostgresStorage {
-	postgresUrlString := os.Getenv("DATABASE_URL")
+	postgresUrlString := os.Getenv("STORAGE_URL")
 	if postgresUrlString == "" {
-		postgresUrlString = "postgres://localhost/botbot"
+		log.Fatal("STORAGE_URL cannot be empty.\nexport STORAGE_URL=postgres://user:password@host:port/db_name")
 	}
 	dataSource, err := pq.ParseURL(postgresUrlString)
 	if err != nil {
