@@ -64,7 +64,7 @@ func (self *BotBot) listen(queueName string) {
 		}
 		if len(msg) != 0 {
 			if glog.V(1) {
-				glog.Info("Command: ", string(msg))
+				glog.Infoln("Command: ", string(msg))
 			}
 			self.fromBus <- string(msg)
 		}
@@ -146,7 +146,7 @@ func (self *BotBot) handleCommand(cmd string, args string) {
 
 	case "REFRESH":
 		if glog.V(1) {
-			glog.Info("Reloading configuration from database")
+			glog.Infoln("Reloading configuration from database")
 		}
 		self.netMan.RefreshChatbots()
 	}

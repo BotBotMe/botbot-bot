@@ -84,7 +84,7 @@ func (self *ircBot) monitor() {
 		select {
 		case <-self.monitorChan:
 		case <-time.After(time.Minute * 10):
-			glog.Info("IRC monitoring KO ; Trying to reconnect.")
+			glog.Infoln("IRC monitoring KO ; Trying to reconnect.")
 			self.Close()
 			self.Connect()
 		}
@@ -143,15 +143,15 @@ func (self *ircBot) Connect() {
 	var err error
 
 	for {
-		glog.Info("Connecting to IRC server: ", self.address)
+		glog.Infoln("Connecting to IRC server: ", self.address)
 
 		socket, err = tls.Dial("tcp", self.address, nil) // Always try TLS first
 		if err == nil {
-			glog.Info("Connected: TLS secure")
+			glog.Infoln("Connected: TLS secure")
 			break
 		}
 
-		glog.Info("Could not connect using TLS because: ", err)
+		glog.Infoln("Could not connect using TLS because: ", err)
 
 		_, ok := err.(x509.HostnameError)
 		if ok {
@@ -160,7 +160,7 @@ func (self *ircBot) Connect() {
 			socket, err = tls.Dial("tcp", self.address, insecure)
 
 			if err == nil && isCertValid(socket.(*tls.Conn)) {
-				glog.Info("Connected: TLS with awkward certificate")
+				glog.Infoln("Connected: TLS with awkward certificate")
 				break
 			}
 		}
@@ -168,11 +168,11 @@ func (self *ircBot) Connect() {
 		socket, err = net.Dial("tcp", self.address)
 
 		if err == nil {
-			glog.Info("Connected: Plain text insecure")
+			glog.Infoln("Connected: Plain text insecure")
 			break
 		}
 
-		glog.Info("IRC Connect error. Will attempt to re-connect. ", err)
+		glog.Infoln("IRC Connect error. Will attempt to re-connect. ", err)
 		time.Sleep(1 * time.Second)
 	}
 
@@ -207,7 +207,7 @@ func isCertValid(conn *tls.Conn) bool {
 
 // Does hostname have IP address connIP?
 func isIPMatch(hostname string, connIP string) bool {
-	glog.Info("Checking IP of", hostname)
+	glog.Infoln("Checking IP of", hostname)
 
 	addrs, err := net.LookupIP(hostname)
 	if err != nil {
@@ -217,7 +217,7 @@ func isIPMatch(hostname string, connIP string) bool {
 
 	for _, ip := range addrs {
 		if ip.String() == connIP {
-			glog.Info("Accepting certificate anyway. " + hostname + " has same IP as connection")
+			glog.Infoln("Accepting certificate anyway. " + hostname + " has same IP as connection")
 			return true
 		}
 	}
@@ -245,7 +245,7 @@ func (self *ircBot) updateServer(config map[string]string) bool {
 		return false
 	}
 
-	glog.Info("Changing IRC server from ", self.address, " to ", addr)
+	glog.Infoln("Changing IRC server from ", self.address, " to ", addr)
 
 	self.Close()
 	time.Sleep(1 * time.Second) // Wait for timeout to be sure listen has stopped
@@ -356,14 +356,14 @@ func (self *ircBot) sender() {
 
 		data = <-self.sendQueue
 		if glog.V(1) {
-			glog.Info("[RAW"+strconv.Itoa(self.id)+"] -->", string(data))
+			glog.Infoln("[RAW"+strconv.Itoa(self.id)+"] -->", string(data))
 		}
 
 		_, err = self.socket.Write(data)
 		if err != nil {
 			self.isRunning = false
 			glog.Errorln("Error writing to socket", err)
-			glog.Info("Stopping chatbot. Monitor can restart it.")
+			glog.Infoln("Stopping chatbot. Monitor can restart it.")
 			self.Close()
 		}
 
@@ -408,7 +408,7 @@ func (self *ircBot) listen() {
 		content = toUnicode(contentData)
 
 		if glog.V(1) {
-			glog.Info("[RAW" + strconv.Itoa(self.id) + "]" + content)
+			glog.Infoln("[RAW" + strconv.Itoa(self.id) + "]" + content)
 		}
 
 		theLine, err := parseLine(content)

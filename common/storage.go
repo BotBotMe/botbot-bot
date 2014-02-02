@@ -122,7 +122,7 @@ func (self *PostgresStorage) BotConfig() []*BotConfig {
 			rows.Scan(&channelId, &channelName, &channelPwd)
 			config.Channels = append(config.Channels, channelName+" "+channelPwd)
 		}
-		glog.Info("config.Channel:", config.Channels)
+		glog.Infoln("config.Channel:", config.Channels)
 	}
 
 	return configs
