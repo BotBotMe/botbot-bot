@@ -211,7 +211,7 @@ func isIPMatch(hostname string, connIP string) bool {
 
 	addrs, err := net.LookupIP(hostname)
 	if err != nil {
-		glog.Info("Error DNS lookup of "+hostname+": ", err)
+		glog.Errorln("Error DNS lookup of "+hostname+": ", err)
 		return false
 	}
 
@@ -362,7 +362,7 @@ func (self *ircBot) sender() {
 		_, err = self.socket.Write(data)
 		if err != nil {
 			self.isRunning = false
-			glog.Info("Error writing to socket", err)
+			glog.Errorln("Error writing to socket", err)
 			glog.Info("Stopping chatbot. Monitor can restart it.")
 			self.Close()
 		}
@@ -395,7 +395,7 @@ func (self *ircBot) listen() {
 				return
 
 			} else {
-				glog.Info("Lost IRC server connection. ", err)
+				glog.Errorln("Lost IRC server connection. ", err)
 				self.Close()
 				return
 			}
@@ -416,7 +416,7 @@ func (self *ircBot) listen() {
 			theLine.ChatBotId = self.id
 			self.act(theLine)
 		} else {
-			glog.Info("Invalid line:", content)
+			glog.Errorln("Invalid line:", content)
 		}
 
 	}
