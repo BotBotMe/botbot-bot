@@ -13,16 +13,18 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
-	"github.com/lincolnloop/botbot-bot/common"
-	"github.com/lincolnloop/botbot-bot/line"
 	"io"
-	"log"
 	"net"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/golang/glog"
+
+	"github.com/lincolnloop/botbot-bot/common"
+	"github.com/lincolnloop/botbot-bot/line"
 )
 
 const (
@@ -82,7 +84,7 @@ func (self *ircBot) monitor() {
 		select {
 		case <-self.monitorChan:
 		case <-time.After(time.Minute * 10):
-			log.Println("IRC monitoring KO ; Trying to reconnect.")
+			glog.Infoln("IRC monitoring KO ; Trying to reconnect.")
 			self.Close()
 			self.Connect()
 		}
@@ -141,15 +143,15 @@ func (self *ircBot) Connect() {
 	var err error
 
 	for {
-		log.Println("Connecting to IRC server: ", self.address)
+		glog.Infoln("Connecting to IRC server: ", self.address)
 
 		socket, err = tls.Dial("tcp", self.address, nil) // Always try TLS first
 		if err == nil {
-			log.Println("Connected: TLS secure")
+			glog.Infoln("Connected: TLS secure")
 			break
 		}
 
-		log.Println("Could not connect using TLS because: ", err)
+		glog.Infoln("Could not connect using TLS because: ", err)
 
 		_, ok := err.(x509.HostnameError)
 		if ok {
@@ -158,7 +160,7 @@ func (self *ircBot) Connect() {
 			socket, err = tls.Dial("tcp", self.address, insecure)
 
 			if err == nil && isCertValid(socket.(*tls.Conn)) {
-				log.Println("Connected: TLS with awkward certificate")
+				glog.Infoln("Connected: TLS with awkward certificate")
 				break
 			}
 		}
@@ -166,11 +168,11 @@ func (self *ircBot) Connect() {
 		socket, err = net.Dial("tcp", self.address)
 
 		if err == nil {
-			log.Println("Connected: Plain text insecure")
+			glog.Infoln("Connected: Plain text insecure")
 			break
 		}
 
-		log.Println("IRC Connect error. Will attempt to re-connect. ", err)
+		glog.Infoln("IRC Connect error. Will attempt to re-connect. ", err)
 		time.Sleep(1 * time.Second)
 	}
 
@@ -205,17 +207,17 @@ func isCertValid(conn *tls.Conn) bool {
 
 // Does hostname have IP address connIP?
 func isIPMatch(hostname string, connIP string) bool {
-	log.Println("Checking IP of", hostname)
+	glog.Infoln("Checking IP of", hostname)
 
 	addrs, err := net.LookupIP(hostname)
 	if err != nil {
-		log.Println("Error DNS lookup of "+hostname+": ", err)
+		glog.Errorln("Error DNS lookup of "+hostname+": ", err)
 		return false
 	}
 
 	for _, ip := range addrs {
 		if ip.String() == connIP {
-			log.Println("Accepting certificate anyway. " + hostname + " has same IP as connection")
+			glog.Infoln("Accepting certificate anyway. " + hostname + " has same IP as connection")
 			return true
 		}
 	}
@@ -243,7 +245,7 @@ func (self *ircBot) updateServer(config map[string]string) bool {
 		return false
 	}
 
-	log.Println("Changing IRC server from ", self.address, " to ", addr)
+	glog.Infoln("Changing IRC server from ", self.address, " to ", addr)
 
 	self.Close()
 	time.Sleep(1 * time.Second) // Wait for timeout to be sure listen has stopped
@@ -353,13 +355,15 @@ func (self *ircBot) sender() {
 	for self.isRunning {
 
 		data = <-self.sendQueue
-		log.Print("[RAW"+strconv.Itoa(self.id)+"] -->", string(data))
+		if glog.V(1) {
+			glog.Infoln("[RAW"+strconv.Itoa(self.id)+"] -->", string(data))
+		}
 
 		_, err = self.socket.Write(data)
 		if err != nil {
 			self.isRunning = false
-			log.Println("Error writing to socket", err)
-			log.Println("Stopping chatbot. Monitor can restart it.")
+			glog.Errorln("Error writing to socket", err)
+			glog.Infoln("Stopping chatbot. Monitor can restart it.")
 			self.Close()
 		}
 
@@ -391,7 +395,7 @@ func (self *ircBot) listen() {
 				return
 
 			} else {
-				log.Println("Lost IRC server connection. ", err)
+				glog.Errorln("Lost IRC server connection. ", err)
 				self.Close()
 				return
 			}
@@ -403,14 +407,16 @@ func (self *ircBot) listen() {
 
 		content = toUnicode(contentData)
 
-		log.Print("[RAW" + strconv.Itoa(self.id) + "]" + content)
+		if glog.V(1) {
+			glog.Infoln("[RAW" + strconv.Itoa(self.id) + "]" + content)
+		}
 
 		theLine, err := parseLine(content)
 		if err == nil {
 			theLine.ChatBotId = self.id
 			self.act(theLine)
 		} else {
-			log.Println("Invalid line:", content)
+			glog.Errorln("Invalid line:", content)
 		}
 
 	}

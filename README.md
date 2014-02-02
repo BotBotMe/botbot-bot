@@ -9,10 +9,16 @@ External resources:
 * A Postgres database with the schema as defined in `schema.sql`.
 * A Redis database used as a message bus between the plugins and the bot.
 
+Before loading the sample data from `botbot_sample.dump` you will need to update the script with the irc nick and password.
+Installing the database schema and loading sample data:
+
+    psql -U botbot -h localhost -W botbot -f schema.sql 
+    psql -U botbot -h localhost -W botbot -f botbot_sample.dump 
+
 Configuration is handled via environment variables:
 
-    DATABASE_URL=postgres://user:password@host:port/db_name \
-    REDIS_PLUGIN_QUEUE_URL=redis://host:port/db_number botbot-bot
+    STORAGE_URL=postgres://user:password@host:port/db_name \
+    QUEUE_URL=redis://host:port/db_number botbot-bot
 
 ## Architecture
 
