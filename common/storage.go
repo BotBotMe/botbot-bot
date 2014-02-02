@@ -2,11 +2,11 @@ package common
 
 import (
 	"database/sql"
-	"log"
 	"os"
 	"time"
 
 	"github.com/bmizerany/pq"
+	"github.com/golang/glog"
 )
 
 // Storage. Wraps the database
@@ -56,16 +56,19 @@ type PostgresStorage struct {
 // Connect to the database.
 func NewPostgresStorage() *PostgresStorage {
 	postgresUrlString := os.Getenv("STORAGE_URL")
+	if glog.V(2) {
+		glog.Infoln("postgresUrlString: ", postgresUrlString)
+	}
 	if postgresUrlString == "" {
-		log.Fatal("STORAGE_URL cannot be empty.\nexport STORAGE_URL=postgres://user:password@host:port/db_name")
+		glog.Fatal("STORAGE_URL cannot be empty.\nexport STORAGE_URL=postgres://user:password@host:port/db_name")
 	}
 	dataSource, err := pq.ParseURL(postgresUrlString)
 	if err != nil {
-		log.Fatal("Could not read database string", err)
+		glog.Fatal("Could not read database string", err)
 	}
 	db, err := sql.Open("postgres", dataSource+" sslmode=disable")
 	if err != nil {
-		log.Fatal("Could not connect to database.", err)
+		glog.Fatal("Could not connect to database.", err)
 	}
 
 	return &PostgresStorage{db}
@@ -81,7 +84,7 @@ func (self *PostgresStorage) BotConfig() []*BotConfig {
 	sql := "SELECT id, server, server_password, nick, password, real_name FROM bots_chatbot WHERE is_active=true"
 	rows, err = self.db.Query(sql)
 	if err != nil {
-		log.Fatal("Error running: ", sql, " ", err)
+		glog.Fatal("Error running: ", sql, " ", err)
 	}
 
 	var chatbotId int
@@ -110,7 +113,7 @@ func (self *PostgresStorage) BotConfig() []*BotConfig {
 		config := configs[i]
 		rows, err = self.db.Query("SELECT id, name, password FROM bots_channel WHERE is_active=true and chatbot_id=$1", config.Id)
 		if err != nil {
-			log.Fatal("Error running:", err)
+			glog.Fatal("Error running:", err)
 		}
 		var channelId int
 		var channelName string
@@ -119,7 +122,7 @@ func (self *PostgresStorage) BotConfig() []*BotConfig {
 			rows.Scan(&channelId, &channelName, &channelPwd)
 			config.Channels = append(config.Channels, channelName+" "+channelPwd)
 		}
-		log.Println("config.Channel:", config.Channels)
+		glog.Info("config.Channel:", config.Channels)
 	}
 
 	return configs
@@ -189,7 +192,7 @@ func (self *PostgresStorage) channelId(name string) (int, error) {
 	rows.Scan(&channelId)
 
 	if rows.Next() {
-		log.Fatal("More than one result. "+
+		glog.Fatal("More than one result. "+
 			"Same name channels on different nets not yet supported. ", query)
 	}
 

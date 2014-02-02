@@ -1,10 +1,11 @@
 package main
 
 import (
-	"log"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/golang/glog"
 
 	"github.com/lincolnloop/botbot-bot/common"
 	"github.com/lincolnloop/botbot-bot/dispatch"
@@ -59,10 +60,12 @@ func (self *BotBot) listen(queueName string) {
 	for {
 		_, msg, err = self.queue.Blpop([]string{queueName}, 0)
 		if err != nil {
-			log.Fatal("Error reading (BLPOP) from queue. ", err)
+			glog.Fatal("Error reading (BLPOP) from queue. ", err)
 		}
 		if len(msg) != 0 {
-			log.Println("Command: ", string(msg))
+			if glog.V(1) {
+				glog.Info("Command: ", string(msg))
+			}
 			self.fromBus <- string(msg)
 		}
 	}
@@ -122,7 +125,9 @@ func (self *BotBot) handleCommand(cmd string, args string) {
 		parts := strings.SplitN(args, " ", 3)
 		chatbotId, err := strconv.Atoi(parts[0])
 		if err != nil {
-			log.Println("Invalid chatbot id: ", parts[0])
+			if glog.V(1) {
+				glog.Info("Invalid chatbot id: ", parts[0])
+			}
 			return
 		}
 
@@ -140,7 +145,9 @@ func (self *BotBot) handleCommand(cmd string, args string) {
 		self.dis.Dispatch(internalLine)
 
 	case "REFRESH":
-		log.Println("Reloading configuration from database")
+		if glog.V(1) {
+			glog.Info("Reloading configuration from database")
+		}
 		self.netMan.RefreshChatbots()
 	}
 }

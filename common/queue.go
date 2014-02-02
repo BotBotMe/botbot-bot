@@ -1,12 +1,12 @@
 package common
 
 import (
-	"log"
 	"net"
 	"net/url"
 	"os"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/monnand/goredis"
 )
 
@@ -88,11 +88,11 @@ type RedisQueue struct {
 func NewRedisQueue() Queue {
 	redisUrlString := os.Getenv("QUEUE_URL")
 	if redisUrlString == "" {
-		log.Fatal("QUEUE_URL cannot be empty.\nexport QUEUE_URL=redis://host:port/db_number")
+		glog.Fatal("QUEUE_URL cannot be empty.\nexport QUEUE_URL=redis://host:port/db_number")
 	}
 	redisUrl, err := url.Parse(redisUrlString)
 	if err != nil {
-		log.Fatal("Could not read Redis string", err)
+		glog.Fatal("Could not read Redis string", err)
 	}
 	redisQueue := goredis.Client{Addr: redisUrl.Host}
 	s := RedisQueue{queue: &redisQueue}
@@ -104,7 +104,7 @@ func (self *RedisQueue) waitForRedis() {
 
 	_, err := self.queue.Ping()
 	for err != nil {
-		log.Println("Waiting for redis...")
+		glog.Info("Waiting for redis...")
 		time.Sleep(1 * time.Second)
 
 		_, err = self.queue.Ping()

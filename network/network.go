@@ -1,16 +1,14 @@
 package network
 
 import (
+	"sort"
+	"time"
 
-	// local packages
+	"github.com/golang/glog"
+
 	"github.com/lincolnloop/botbot-bot/common"
 	"github.com/lincolnloop/botbot-bot/line"
 	"github.com/lincolnloop/botbot-bot/network/irc"
-
-	// stdlib package
-	"log"
-	"sort"
-	"time"
 )
 
 type NetworkManager struct {
@@ -70,7 +68,7 @@ func (self *NetworkManager) RefreshChatbots() {
 	for currId, _ := range self.chatbots {
 
 		if active.Search(currId) == numActive { // if currId not in active:
-			log.Println("Stopping chatbot: ", currId)
+			glog.Infoln("Stopping chatbot: ", currId)
 
 			self.chatbots[currId].Close()
 			delete(self.chatbots, currId)
@@ -80,7 +78,7 @@ func (self *NetworkManager) RefreshChatbots() {
 
 func (self *NetworkManager) Connect(config *common.BotConfig) common.ChatBot {
 
-	log.Printf("Creating chatbot: %+v\n", config)
+	glog.Infoln("Creating chatbot: %+v\n", config)
 	return irc.NewBot(config, self.fromServer)
 }
 
@@ -109,7 +107,7 @@ func (self *NetworkManager) getChatbotById(id int) common.ChatBot {
 // Restart a chatbot
 func (self *NetworkManager) restart(botId int) {
 
-	log.Println("Restarting bot ", botId)
+	glog.Infoln("Restarting bot ", botId)
 
 	var config *common.BotConfig
 
@@ -124,7 +122,7 @@ func (self *NetworkManager) restart(botId int) {
 	}
 
 	if config == nil {
-		log.Println("Could not find configuration for bot ", botId, ". Bot will not run.")
+		glog.Infoln("Could not find configuration for bot ", botId, ". Bot will not run.")
 		delete(self.chatbots, botId)
 		return
 	}

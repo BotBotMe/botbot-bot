@@ -1,11 +1,12 @@
 package main
 
 import (
-	"log"
+	"flag"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/golang/glog"
 	"github.com/lincolnloop/botbot-bot/common"
 )
 
@@ -15,8 +16,8 @@ const (
 )
 
 func main() {
-	log.SetFlags(log.Lshortfile | log.Ldate | log.Ltime)
-	log.Println("START. Use 'botbot -help' for command line options.")
+	flag.Parse()
+	glog.Infoln("START. Use 'botbot -help' for command line options.")
 
 	storage := common.NewPostgresStorage()
 	defer storage.Close()
@@ -38,10 +39,10 @@ func main() {
 	// Wait for stop signal
 	for {
 		<-kill
-		log.Println("Graceful shutdown")
+		glog.Infoln("Graceful shutdown")
 		botbot.shutdown()
 		break
 	}
 
-	log.Println("Bye")
+	glog.Infoln("Bye")
 }
