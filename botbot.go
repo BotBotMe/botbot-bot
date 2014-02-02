@@ -126,7 +126,7 @@ func (self *BotBot) handleCommand(cmd string, args string) {
 		chatbotId, err := strconv.Atoi(parts[0])
 		if err != nil {
 			if glog.V(1) {
-				glog.Info("Invalid chatbot id: ", parts[0])
+				glog.Errorln("Invalid chatbot id: ", parts[0])
 			}
 			return
 		}
