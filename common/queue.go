@@ -104,7 +104,7 @@ func (self *RedisQueue) waitForRedis() {
 
 	_, err := self.queue.Ping()
 	for err != nil {
-		glog.Error("Waiting for redis...")
+		glog.Errorln("Waiting for redis...")
 		time.Sleep(1 * time.Second)
 
 		_, err = self.queue.Ping()
