@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/lincolnloop/botbot-bot.png)](https://travis-ci.org/lincolnloop/botbot-bot)
+[![Build Status](https://travis-ci.org/BotBotMe/botbot-bot.png)](https://travis-ci.org/BotBotMe/botbot-bot)
 
 The bot used in botbot.me. To install:
 
