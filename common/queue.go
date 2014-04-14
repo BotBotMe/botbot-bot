@@ -86,9 +86,9 @@ type RedisQueue struct {
 }
 
 func NewRedisQueue() Queue {
-	redisUrlString := os.Getenv("QUEUE_URL")
+	redisUrlString := os.Getenv("REDIS_PLUGIN_QUEUE_URL")
 	if redisUrlString == "" {
-		glog.Fatal("QUEUE_URL cannot be empty.\nexport QUEUE_URL=redis://host:port/db_number")
+		glog.Fatal("REDIS_PLUGIN_QUEUE_URL cannot be empty.\nexport REDIS_PLUGIN_QUEUE_URL=redis://host:port/db_number")
 	}
 	redisUrl, err := url.Parse(redisUrlString)
 	if err != nil {
