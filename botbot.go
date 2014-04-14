@@ -7,11 +7,11 @@ import (
 
 	"github.com/golang/glog"
 
-	"github.com/lincolnloop/botbot-bot/common"
-	"github.com/lincolnloop/botbot-bot/dispatch"
-	"github.com/lincolnloop/botbot-bot/line"
-	"github.com/lincolnloop/botbot-bot/network"
-	"github.com/lincolnloop/botbot-bot/user"
+	"github.com/BotBotMe/botbot-bot/common"
+	"github.com/BotBotMe/botbot-bot/dispatch"
+	"github.com/BotBotMe/botbot-bot/line"
+	"github.com/BotBotMe/botbot-bot/network"
+	"github.com/BotBotMe/botbot-bot/user"
 )
 
 /*

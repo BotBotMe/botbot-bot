@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/lincolnloop/botbot-bot/common"
+	"github.com/BotBotMe/botbot-bot/common"
 	"strings"
 	"testing"
 	"time"

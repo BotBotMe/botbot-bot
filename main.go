@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/BotBotMe/botbot-bot/common"
 	"github.com/golang/glog"
-	"github.com/lincolnloop/botbot-bot/common"
 )
 
 const (

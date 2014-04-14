@@ -23,8 +23,8 @@ import (
 
 	"github.com/golang/glog"
 
-	"github.com/lincolnloop/botbot-bot/common"
-	"github.com/lincolnloop/botbot-bot/line"
+	"github.com/BotBotMe/botbot-bot/common"
+	"github.com/BotBotMe/botbot-bot/line"
 )
 
 const (
@@ -368,7 +368,7 @@ func (self *ircBot) sender() {
 		}
 
 		// Rate limit to one message every 2 seconds
-		// https://github.com/lincolnloop/botbot-bot/issues/2
+		// https://github.com/BotBotMe/botbot-bot/issues/2
 		time.Sleep(twoSeconds)
 	}
 }
