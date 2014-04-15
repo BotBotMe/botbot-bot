@@ -275,6 +275,9 @@ func (self *ircBot) updateNick(newNick, newPass string) {
 func (self *ircBot) updateChannels(newChannels []string) {
 
 	if isEqual(newChannels, self.channels) {
+		if glog.V(2) {
+			glog.Infoln("Channels comparison is equals for bot: ", self.nick)
+		}
 		return
 	}
 

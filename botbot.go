@@ -120,6 +120,9 @@ func (self *BotBot) mainLoop() {
 //  - WRITE <chatbotid> <channel> <msg>: Send message to server
 //  - REFRESH: Reload plugin configuration
 func (self *BotBot) handleCommand(cmd string, args string) {
+	if glog.V(2) {
+		glog.Infoln("HandleCommand:", cmd)
+	}
 	switch cmd {
 	case "WRITE":
 		parts := strings.SplitN(args, " ", 3)
