@@ -37,6 +37,14 @@ func (self *NetworkManager) GetUserByChatbotId(id int) string {
 
 // Connect to networks / start chatbots. Loads chatbot configuration from DB.
 func (self *NetworkManager) RefreshChatbots() {
+	if glog.V(2) {
+		glog.Infoln("Entering in NetworkManager.RefreshChatbots")
+	}
+
+	// Sleeping before refreshing chatbots to make sure that the change made
+	// made it into postgres. This illustrate the fact that redis is faster
+	// than postgres
+	time.Sleep(1 * time.Second)
 
 	botConfigs := self.storage.BotConfig()
 
@@ -52,9 +60,15 @@ func (self *NetworkManager) RefreshChatbots() {
 		current = self.chatbots[id]
 		if current == nil {
 			// Create
+			if glog.V(2) {
+				glog.Infoln("Connect the bot with the following config:", config)
+			}
 			self.chatbots[id] = self.Connect(config)
 		} else {
 			// Update
+			if glog.V(2) {
+				glog.Infoln("Update the bot with the following config:", config)
+			}
 			self.chatbots[id].Update(config)
 		}
 
@@ -74,6 +88,10 @@ func (self *NetworkManager) RefreshChatbots() {
 			delete(self.chatbots, currId)
 		}
 	}
+	if glog.V(2) {
+		glog.Infoln("Exiting NetworkManager.RefreshChatbots")
+	}
+
 }
 
 func (self *NetworkManager) Connect(config *common.BotConfig) common.ChatBot {
