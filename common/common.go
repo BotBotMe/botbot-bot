@@ -2,6 +2,7 @@ package common
 
 import (
 	"io"
+	"strings"
 )
 
 // Interface all bots must implement
@@ -15,11 +16,19 @@ type ChatBot interface {
 
 // Configuration for a 'chatbot', which is what clients pay for
 type BotConfig struct {
-	Id     int
-	Config map[string]string
+	Id       int
+	Config   map[string]string
+	Channels []*Channel
+}
 
-	// Normally this array is names of the channels to join
-	// but if the channel has a password, the string is "<channel> <pw>"
-	// That means we can pass the string straight to JOIN and it works
-	Channels []string
+// Configuration for a channel
+type Channel struct {
+	Id          int
+	Name        string
+	Pwd         string
+	Fingerprint string
+}
+
+func (cc *Channel) Credential() string {
+	return strings.TrimSpace(cc.Name + " " + cc.Pwd)
 }

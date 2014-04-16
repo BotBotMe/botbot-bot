@@ -10,8 +10,8 @@ import (
 	"github.com/BotBotMe/botbot-bot/line"
 )
 
-const (
-	NEW_CHANNEL = "#unitnew"
+var (
+	NEW_CHANNEL = common.Channel{Name: "#unitnew", Fingerprint: "new-channel-uuid"}
 )
 
 func TestParseLine_welcome(t *testing.T) {
@@ -174,6 +174,8 @@ func TestFlood(t *testing.T) {
 	fromServer := make(chan *line.Line)
 	receivedCounter := make(chan bool)
 	mockSocket := MockSocket{counter: receivedCounter}
+	channels := make([]*common.Channel, 1)
+	channels = append(channels, &common.Channel{Name: "test", Fingerprint: "uuid-string"})
 
 	chatbot := &ircBot{
 		id:         99,
@@ -182,7 +184,7 @@ func TestFlood(t *testing.T) {
 		realname:   "Unit Test",
 		password:   "test",
 		fromServer: fromServer,
-		channels:   []string{"test"},
+		channels:   channels,
 		socket:     &mockSocket,
 		isRunning:  true,
 	}
@@ -215,6 +217,9 @@ func TestUpdate(t *testing.T) {
 
 	fromServer := make(chan *line.Line)
 	mockSocket := MockSocket{counter: nil}
+	channels := make([]*common.Channel, 0, 2)
+	channel := common.Channel{Name: "#test", Fingerprint: "uuid-string"}
+	channels = append(channels, &channel)
 
 	chatbot := &ircBot{
 		id:         99,
@@ -223,7 +228,7 @@ func TestUpdate(t *testing.T) {
 		realname:   "Unit Test",
 		password:   "test",
 		fromServer: fromServer,
-		channels:   []string{"#test"},
+		channels:   channels,
 		socket:     &mockSocket,
 		sendQueue:  make(chan []byte, 100),
 		isRunning:  true,
@@ -233,7 +238,7 @@ func TestUpdate(t *testing.T) {
 
 	conf := map[string]string{
 		"nick": "test", "password": "testxyz", "server": "localhost"}
-	channels := []string{"#test", NEW_CHANNEL}
+	channels = append(channels, &NEW_CHANNEL)
 	newConfig := &common.BotConfig{Id: 1, Config: conf, Channels: channels}
 
 	chatbot.Update(newConfig)
@@ -252,7 +257,7 @@ func TestUpdate(t *testing.T) {
 
 		cmd = strings.TrimSpace(cmd)
 
-		if cmd == "JOIN "+NEW_CHANNEL {
+		if cmd == "JOIN "+NEW_CHANNEL.Credential() {
 			isFound = true
 			break
 		}
@@ -263,7 +268,7 @@ func TestUpdate(t *testing.T) {
 	}
 
 	if !isFound {
-		t.Error("Expected JOIN " + NEW_CHANNEL)
+		t.Error("Expected JOIN " + NEW_CHANNEL.Credential())
 	}
 }
 

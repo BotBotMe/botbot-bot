@@ -10,7 +10,6 @@ package irc
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"io"
@@ -40,7 +39,7 @@ type ircBot struct {
 	password         string
 	serverPass       string
 	fromServer       chan *line.Line
-	channels         []string
+	channels         []*common.Channel
 	isRunning        bool
 	isConnecting     bool
 	isAuthenticating bool
@@ -227,7 +226,7 @@ func isIPMatch(hostname string, connIP string) bool {
 // Update bot configuration. Called when webapp changes a chatbot's config.
 func (self *ircBot) Update(config *common.BotConfig) {
 
-	isNewServer := self.updateServer(config.Config)
+	isNewServer := self.updateServer(config)
 	if isNewServer {
 		// If the server changed, we've already done nick and channel changes too
 		return
@@ -238,9 +237,9 @@ func (self *ircBot) Update(config *common.BotConfig) {
 }
 
 // Update the IRC server we're connected to
-func (self *ircBot) updateServer(config map[string]string) bool {
+func (self *ircBot) updateServer(config *common.BotConfig) bool {
 
-	addr := config["server"]
+	addr := config.Config["server"]
 	if addr == self.address {
 		return false
 	}
@@ -251,9 +250,9 @@ func (self *ircBot) updateServer(config map[string]string) bool {
 	time.Sleep(1 * time.Second) // Wait for timeout to be sure listen has stopped
 
 	self.address = addr
-	self.nick = config["nick"]
-	self.password = config["password"]
-	self.channels = splitChannels(config["rooms"])
+	self.nick = config.Config["nick"]
+	self.password = config.Config["password"]
+	self.channels = config.Channels
 
 	self.init()
 
@@ -272,8 +271,7 @@ func (self *ircBot) updateNick(newNick, newPass string) {
 }
 
 // Update the channels based on new configuration, leaving old ones and joining new ones
-func (self *ircBot) updateChannels(newChannels []string) {
-
+func (self *ircBot) updateChannels(newChannels []*common.Channel) {
 	if isEqual(newChannels, self.channels) {
 		if glog.V(2) {
 			glog.Infoln("Channels comparison is equals for bot: ", self.nick)
@@ -284,14 +282,14 @@ func (self *ircBot) updateChannels(newChannels []string) {
 	// PART old ones
 	for _, channel := range self.channels {
 		if !isIn(channel, newChannels) {
-			self.part(channel)
+			self.part(channel.Credential())
 		}
 	}
 
 	// JOIN new ones
 	for _, channel := range newChannels {
 		if !isIn(channel, self.channels) {
-			self.join(channel)
+			self.join(channel.Credential())
 		}
 	}
 
@@ -301,7 +299,7 @@ func (self *ircBot) updateChannels(newChannels []string) {
 // Join channels
 func (self *ircBot) JoinAll() {
 	for _, channel := range self.channels {
-		self.join(channel)
+		self.join(channel.Credential())
 	}
 }
 
@@ -507,7 +505,7 @@ func (self *ircBot) sendShutdown() {
 		Content:   ""}
 
 	for _, channel := range self.channels {
-		shutLine.Channel = channel
+		shutLine.Channel = channel.Credential()
 		self.fromServer <- shutLine
 	}
 }
@@ -671,14 +669,33 @@ func toUnicode(data []byte) string {
 }
 
 // Are a and b equal?
-func isEqual(a, b []string) bool {
-	ja := strings.Join(a, ",")
-	jb := strings.Join(b, ",")
-	return bytes.Equal([]byte(ja), []byte(jb))
+func isEqual(a, b []*common.Channel) (flag bool) {
+	for _, a_cc := range a {
+		flag = false
+		for _, b_cc := range b {
+			if a_cc.Fingerprint == b_cc.Fingerprint {
+				flag = true
+				break
+			}
+		}
+		if flag == false {
+			return flag
+		}
+	}
+	return true
 }
 
 // Is a in b? container must be sorted
-func isIn(a string, container []string) bool {
-	index := sort.SearchStrings(container, a)
-	return index < len(container) && container[index] == a
+func isIn(a *common.Channel, container []*common.Channel) (flag bool) {
+	flag = false
+	for _, c_cc := range container {
+		if a.Fingerprint == c_cc.Fingerprint {
+			flag = true
+			break
+		}
+	}
+	if flag == false {
+		return flag
+	}
+	return true
 }

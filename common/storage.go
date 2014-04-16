@@ -30,8 +30,8 @@ func NewMockStorage(serverPort string) Storage {
 		"nick":     "test",
 		"password": "testxyz",
 		"server":   "127.0.0.1:" + serverPort}
-	channels := make([]string, 0)
-	channels = append(channels, "#unit")
+	channels := make([]*Channel, 0)
+	channels = append(channels, &Channel{Id: 1, Name: "#unit", Fingerprint: "5876HKJGYUT"})
 	botConf := &BotConfig{Id: 1, Config: conf, Channels: channels}
 
 	return &MockStorage{botConfs: []*BotConfig{botConf}}
@@ -104,23 +104,26 @@ func (self *PostgresStorage) BotConfig() []*BotConfig {
 		config := &BotConfig{
 			Id:       chatbotId,
 			Config:   confMap,
-			Channels: make([]string, 0),
+			Channels: make([]*Channel, 0),
 		}
 
 		configs = append(configs, config)
 	}
 	for i := range configs {
 		config := configs[i]
-		rows, err = self.db.Query("SELECT id, name, password FROM bots_channel WHERE is_active=true and chatbot_id=$1", config.Id)
+		rows, err = self.db.Query("SELECT id, name, password, fingerprint FROM bots_channel WHERE is_active=true and chatbot_id=$1", config.Id)
 		if err != nil {
 			glog.Fatal("Error running:", err)
 		}
 		var channelId int
 		var channelName string
 		var channelPwd string
+		var channelFingerprint string
 		for rows.Next() {
-			rows.Scan(&channelId, &channelName, &channelPwd)
-			config.Channels = append(config.Channels, channelName+" "+channelPwd)
+			rows.Scan(&channelId, &channelName, &channelPwd, &channelFingerprint)
+			config.Channels = append(config.Channels,
+				&Channel{Id: channelId, Name: channelName,
+					Pwd: channelPwd, Fingerprint: channelFingerprint})
 		}
 		glog.Infoln("config.Channel:", config.Channels)
 	}
