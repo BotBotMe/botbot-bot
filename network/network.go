@@ -40,7 +40,6 @@ func (self *NetworkManager) RefreshChatbots() {
 	if glog.V(2) {
 		glog.Infoln("Entering in NetworkManager.RefreshChatbots")
 	}
-
 	botConfigs := self.storage.BotConfig()
 
 	var current common.ChatBot
@@ -74,7 +73,7 @@ func (self *NetworkManager) RefreshChatbots() {
 	active.Sort()
 	numActive := len(active)
 
-	for currId, _ := range self.chatbots {
+	for currId := range self.chatbots {
 
 		if active.Search(currId) == numActive { // if currId not in active:
 			glog.Infoln("Stopping chatbot: ", currId)
