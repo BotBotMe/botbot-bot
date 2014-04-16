@@ -41,11 +41,6 @@ func (self *NetworkManager) RefreshChatbots() {
 		glog.Infoln("Entering in NetworkManager.RefreshChatbots")
 	}
 
-	// Sleeping before refreshing chatbots to make sure that the change made
-	// made it into postgres. This illustrate the fact that redis is faster
-	// than postgres
-	time.Sleep(1 * time.Second)
-
 	botConfigs := self.storage.BotConfig()
 
 	var current common.ChatBot
