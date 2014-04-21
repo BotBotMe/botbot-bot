@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/bmizerany/pq"
 	"github.com/golang/glog"
+	"github.com/lib/pq"
 )
 
 // Storage. Wraps the database
@@ -66,7 +66,7 @@ func NewPostgresStorage() *PostgresStorage {
 	if err != nil {
 		glog.Fatal("Could not read database string", err)
 	}
-	db, err := sql.Open("postgres", dataSource+" sslmode=disable")
+	db, err := sql.Open("postgres", dataSource+" sslmode=disable fallback_application_name=bot")
 	if err != nil {
 		glog.Fatal("Could not connect to database.", err)
 	}
