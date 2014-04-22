@@ -71,6 +71,12 @@ func NewPostgresStorage() *PostgresStorage {
 		glog.Fatal("Could not connect to database.", err)
 	}
 
+	// The following 2 lines mitigate the leak of postgresql connection leak
+	// explicitly setting a maximum number of postgresql connections
+	db.SetMaxOpenConns(5)
+	// explicitly setting a maximum number of Idle postgresql connections
+	db.SetMaxIdleConns(2)
+
 	return &PostgresStorage{db}
 }
 
