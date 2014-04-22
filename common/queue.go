@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"os"
 	"time"
+	"strconv"
+	"strings"
 
 	"github.com/golang/glog"
 	"github.com/monnand/goredis"
@@ -94,7 +96,13 @@ func NewRedisQueue() Queue {
 	if err != nil {
 		glog.Fatal("Could not read Redis string", err)
 	}
-	redisQueue := goredis.Client{Addr: redisUrl.Host}
+
+	redisDb, err := strconv.Atoi(strings.TrimLeft(redisUrl.Path, "/"))
+	if err != nil {
+		glog.Fatal("Could not read Redis path", err)
+	}
+
+	redisQueue := goredis.Client{Addr: redisUrl.Host, Db: redisDb}
 	s := RedisQueue{queue: &redisQueue}
 	s.waitForRedis()
 	return &s
