@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/bmizerany/pq"
 	"github.com/golang/glog"
+	"github.com/lib/pq"
 )
 
 // Storage. Wraps the database
@@ -66,10 +66,16 @@ func NewPostgresStorage() *PostgresStorage {
 	if err != nil {
 		glog.Fatal("Could not read database string", err)
 	}
-	db, err := sql.Open("postgres", dataSource+" sslmode=disable")
+	db, err := sql.Open("postgres", dataSource+" sslmode=disable fallback_application_name=bot")
 	if err != nil {
 		glog.Fatal("Could not connect to database.", err)
 	}
+
+	// The following 2 lines mitigate the leak of postgresql connection leak
+	// explicitly setting a maximum number of postgresql connections
+	db.SetMaxOpenConns(5)
+	// explicitly setting a maximum number of Idle postgresql connections
+	db.SetMaxIdleConns(2)
 
 	return &PostgresStorage{db}
 }
