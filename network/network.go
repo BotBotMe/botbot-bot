@@ -90,7 +90,7 @@ func (self *NetworkManager) RefreshChatbots() {
 
 func (self *NetworkManager) Connect(config *common.BotConfig) common.ChatBot {
 
-	glog.Infoln("Creating chatbot: %+v\n", config)
+	glog.Infoln("Creating chatbot,", config)
 	return irc.NewBot(config, self.fromServer)
 }
 

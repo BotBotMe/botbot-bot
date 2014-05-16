@@ -32,3 +32,7 @@ type Channel struct {
 func (cc *Channel) Credential() string {
 	return strings.TrimSpace(cc.Name + " " + cc.Pwd)
 }
+
+func (cc *Channel) String() string {
+	return cc.Name
+}
