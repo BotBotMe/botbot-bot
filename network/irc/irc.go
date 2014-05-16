@@ -44,7 +44,7 @@ type ircBot struct {
 	isConnecting     bool
 	isAuthenticating bool
 	sendQueue        chan []byte
-	monitorChan      chan string
+	monitorChan      chan struct{}
 }
 
 func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot {
@@ -64,7 +64,7 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 		serverPass:  config.Config["server_password"], // PASS password
 		fromServer:  fromServer,
 		channels:    config.Channels,
-		monitorChan: make(chan string),
+		monitorChan: make(chan struct{}),
 		isRunning:   true,
 	}
 
@@ -82,7 +82,7 @@ func (self *ircBot) monitor() {
 	for self.isRunning {
 		select {
 		case <-self.monitorChan:
-		case <-time.After(time.Minute * 10):
+		case <-time.After(time.Second * 30):
 			glog.Infoln("IRC monitoring KO ; Trying to reconnect.")
 			self.Close()
 			self.Connect()
@@ -90,11 +90,11 @@ func (self *ircBot) monitor() {
 	}
 }
 
-// Ping the server every 5 min to keep the connection open
+// Ping the server every 10 sec to keep the connection open
 func (self *ircBot) pinger() {
 	i := 0
 	for self.isRunning {
-		<-time.After(time.Minute * 5)
+		<-time.After(time.Second * 10)
 		i = i + 1
 		self.SendRaw("PING " + strconv.Itoa(i))
 	}
@@ -130,7 +130,8 @@ func (self *ircBot) init() {
 	self.SendRaw("PING Bonjour")
 }
 
-// Connect to the server
+// Connect to the server. Here we keep trying every 10 seconds until we manage
+// to Dial to the server.
 func (self *ircBot) Connect() {
 
 	if self.socket != nil {
@@ -172,7 +173,7 @@ func (self *ircBot) Connect() {
 		}
 
 		glog.Infoln("IRC Connect error. Will attempt to re-connect. ", err)
-		time.Sleep(1 * time.Second)
+		time.Sleep(10 * time.Second)
 	}
 
 	self.socket = socket
@@ -426,7 +427,7 @@ func (self *ircBot) listen() {
 func (self *ircBot) act(theLine *line.Line) {
 
 	// Send the command on the monitorChan
-	self.monitorChan <- theLine.Command
+	self.monitorChan <- struct{}{}
 
 	// As soon as we receive a message from the server, complete initiatization
 	if self.isConnecting {
