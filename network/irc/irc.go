@@ -102,6 +102,7 @@ func (bot *ircBot) monitor() {
 	for bot.IsRunning() {
 		if pongCounter > maxPongWithoutMessage {
 			glog.Infoln("More than maxPongWithoutMessage pong without message for", bot)
+			glog.Infoln("IRC monitoring KO", bot)
 			bot.reconnect()
 		}
 		select {
@@ -121,8 +122,9 @@ func (bot *ircBot) monitor() {
 				}
 			case <-time.After(time.Second * 10):
 				glog.Infoln("No pong from ircBot server", bot)
-				glog.Infoln("IRC monitoring KO.")
-				bot.reconnect()
+				// Do not kill the server on the first missed PONG
+				// 3 chances 15/5
+				pongCounter += 5
 			}
 		}
 	}
