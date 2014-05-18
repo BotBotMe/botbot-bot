@@ -130,7 +130,7 @@ func (bot *ircBot) monitor() {
 
 // reconnect the ircBot
 func (bot *ircBot) reconnect() {
-	glog.Infoln("Trying to reconnect.")
+	glog.Infoln("Trying to reconnect", bot)
 	bot.Close()
 	time.Sleep(1 * time.Second) // Wait for timeout to be sure listen has stopped
 	bot.Init()
