@@ -97,7 +97,7 @@ func (bot *ircBot) String() string {
 // reconnect.
 func (bot *ircBot) monitor() {
 	// TODO maxPongWithoutMessage should probably be a field of ircBot
-	maxPongWithoutMessage := 15
+	maxPongWithoutMessage := 150
 	pongCounter := 0
 	for bot.IsRunning() {
 		if pongCounter > maxPongWithoutMessage {
@@ -112,7 +112,7 @@ func (bot *ircBot) monitor() {
 				glog.Infoln("Message received from the server for", bot)
 			}
 		case <-time.After(time.Second * 60):
-			glog.Infoln("Ping the ircBot server", bot)
+			glog.Infoln("Ping the ircBot server", pongCounter, bot)
 			bot.ping()
 			select {
 			case <-bot.pingResponse:
