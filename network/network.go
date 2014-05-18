@@ -2,6 +2,7 @@ package network
 
 import (
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/golang/glog"
@@ -12,6 +13,7 @@ import (
 )
 
 type NetworkManager struct {
+	sync.RWMutex
 	chatbots   map[int]common.ChatBot
 	fromServer chan *line.Line
 	storage    common.Storage
@@ -30,17 +32,23 @@ func NewNetworkManager(storage common.Storage, fromServer chan *line.Line) *Netw
 	return netMan
 }
 
+func (nm *NetworkManager) IsRunning() bool {
+	nm.RLock()
+	defer nm.RUnlock()
+	return nm.isRunning
+}
+
 // Get the User for a ChatbotId
-func (self *NetworkManager) GetUserByChatbotId(id int) string {
-	return self.getChatbotById(id).GetUser()
+func (nm *NetworkManager) GetUserByChatbotId(id int) string {
+	return nm.getChatbotById(id).GetUser()
 }
 
 // Connect to networks / start chatbots. Loads chatbot configuration from DB.
-func (self *NetworkManager) RefreshChatbots() {
+func (nm *NetworkManager) RefreshChatbots() {
 	if glog.V(2) {
 		glog.Infoln("Entering in NetworkManager.RefreshChatbots")
 	}
-	botConfigs := self.storage.BotConfig()
+	botConfigs := nm.storage.BotConfig()
 
 	var current common.ChatBot
 	var id int
@@ -51,19 +59,19 @@ func (self *NetworkManager) RefreshChatbots() {
 		id = config.Id
 		active = append(active, id)
 
-		current = self.chatbots[id]
+		current = nm.chatbots[id]
 		if current == nil {
 			// Create
 			if glog.V(2) {
 				glog.Infoln("Connect the bot with the following config:", config)
 			}
-			self.chatbots[id] = self.Connect(config)
+			nm.chatbots[id] = nm.Connect(config)
 		} else {
 			// Update
 			if glog.V(2) {
 				glog.Infoln("Update the bot with the following config:", config)
 			}
-			self.chatbots[id].Update(config)
+			nm.chatbots[id].Update(config)
 		}
 
 	}
@@ -73,13 +81,13 @@ func (self *NetworkManager) RefreshChatbots() {
 	active.Sort()
 	numActive := len(active)
 
-	for currId := range self.chatbots {
+	for currId := range nm.chatbots {
 
 		if active.Search(currId) == numActive { // if currId not in active:
 			glog.Infoln("Stopping chatbot: ", currId)
 
-			self.chatbots[currId].Close()
-			delete(self.chatbots, currId)
+			nm.chatbots[currId].Close()
+			delete(nm.chatbots, currId)
 		}
 	}
 	if glog.V(2) {
@@ -88,23 +96,23 @@ func (self *NetworkManager) RefreshChatbots() {
 
 }
 
-func (self *NetworkManager) Connect(config *common.BotConfig) common.ChatBot {
+func (nm *NetworkManager) Connect(config *common.BotConfig) common.ChatBot {
 
 	glog.Infoln("Creating chatbot as:,", config)
-	return irc.NewBot(config, self.fromServer)
+	return irc.NewBot(config, nm.fromServer)
 }
 
-func (self *NetworkManager) Send(chatbotId int, channel, msg string) {
-	self.chatbots[chatbotId].Send(channel, msg)
+func (nm *NetworkManager) Send(chatbotId int, channel, msg string) {
+	nm.chatbots[chatbotId].Send(channel, msg)
 }
 
 // Check out chatbots are alive, recreating them if not. Run this in go-routine.
-func (self *NetworkManager) MonitorChatbots() {
+func (nm *NetworkManager) MonitorChatbots() {
 
-	for self.isRunning {
-		for id, bot := range self.chatbots {
+	for nm.IsRunning() {
+		for id, bot := range nm.chatbots {
 			if !bot.IsRunning() {
-				self.restart(id)
+				nm.restart(id)
 			}
 		}
 		time.Sleep(1 * time.Second)
@@ -112,12 +120,12 @@ func (self *NetworkManager) MonitorChatbots() {
 }
 
 // get a chatbot by id
-func (self *NetworkManager) getChatbotById(id int) common.ChatBot {
-	return self.chatbots[id]
+func (nm *NetworkManager) getChatbotById(id int) common.ChatBot {
+	return nm.chatbots[id]
 }
 
 // Restart a chatbot
-func (self *NetworkManager) restart(botId int) {
+func (nm *NetworkManager) restart(botId int) {
 
 	glog.Infoln("Restarting bot ", botId)
 
@@ -125,7 +133,7 @@ func (self *NetworkManager) restart(botId int) {
 
 	// Find configuration for this bot
 
-	botConfigs := self.storage.BotConfig()
+	botConfigs := nm.storage.BotConfig()
 	for _, botConf := range botConfigs {
 		if botConf.Id == botId {
 			config = botConf
@@ -135,17 +143,19 @@ func (self *NetworkManager) restart(botId int) {
 
 	if config == nil {
 		glog.Infoln("Could not find configuration for bot ", botId, ". Bot will not run.")
-		delete(self.chatbots, botId)
+		delete(nm.chatbots, botId)
 		return
 	}
 
-	self.chatbots[botId] = self.Connect(config)
+	nm.chatbots[botId] = nm.Connect(config)
 }
 
 // Stop all bots
-func (self *NetworkManager) Shutdown() {
-	self.isRunning = false
-	for _, bot := range self.chatbots {
+func (nm *NetworkManager) Shutdown() {
+	nm.Lock()
+	nm.isRunning = false
+	for _, bot := range nm.chatbots {
 		bot.Close()
 	}
+	nm.Unlock()
 }

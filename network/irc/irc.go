@@ -33,7 +33,7 @@ const (
 )
 
 type ircBot struct {
-	sync.Mutex
+	sync.RWMutex
 	id               int
 	address          string
 	socket           io.ReadWriteCloser
@@ -529,8 +529,8 @@ func (bot *ircBot) act(theLine *line.Line) {
 }
 
 func (bot *ircBot) IsRunning() bool {
-	bot.Lock()
-	defer bot.Unlock()
+	bot.RLock()
+	defer bot.RUnlock()
 	return bot.isRunning
 }
 
