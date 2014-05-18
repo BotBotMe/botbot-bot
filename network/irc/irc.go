@@ -101,14 +101,14 @@ func (bot *ircBot) monitor() {
 	pongCounter := 0
 	for bot.IsRunning() {
 		if pongCounter > maxPongWithoutMessage {
-			glog.Infoln("More than maxPongWithoutMessage pong without message.")
+			glog.Infoln("More than maxPongWithoutMessage pong without message for", bot)
 			bot.reconnect()
 		}
 		select {
 		case <-bot.monitorChan:
 			pongCounter = 0
 			if glog.V(2) {
-				glog.Infoln("Message received from the server")
+				glog.Infoln("Message received from the server for", bot)
 			}
 		case <-time.After(time.Second * 60):
 			glog.Infoln("Ping the ircBot server", bot)
@@ -116,7 +116,7 @@ func (bot *ircBot) monitor() {
 			select {
 			case <-bot.pingResponse:
 				pongCounter += 1
-				if glog.V(2) {
+				if glog.V(1) {
 					glog.Infoln("Pong from ircBot server", bot)
 				}
 			case <-time.After(time.Second * 10):
@@ -447,7 +447,7 @@ func (bot *ircBot) listen() {
 
 		content = toUnicode(contentData)
 
-		if glog.V(1) {
+		if glog.V(2) {
 			glog.Infoln("[RAW" + strconv.Itoa(bot.id) + "]" + content)
 		}
 
