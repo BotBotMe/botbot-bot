@@ -45,6 +45,8 @@ func (nm *NetworkManager) GetUserByChatbotId(id int) string {
 
 // Connect to networks / start chatbots. Loads chatbot configuration from DB.
 func (nm *NetworkManager) RefreshChatbots() {
+	nm.Lock()
+	nm.Unlock()
 	if glog.V(2) {
 		glog.Infoln("Entering in NetworkManager.RefreshChatbots")
 	}
@@ -77,7 +79,6 @@ func (nm *NetworkManager) RefreshChatbots() {
 	}
 
 	// Stop old ones
-
 	active.Sort()
 	numActive := len(active)
 
@@ -103,7 +104,9 @@ func (nm *NetworkManager) Connect(config *common.BotConfig) common.ChatBot {
 }
 
 func (nm *NetworkManager) Send(chatbotId int, channel, msg string) {
+	nm.RLock()
 	nm.chatbots[chatbotId].Send(channel, msg)
+	nm.RUnlock()
 }
 
 // Check out chatbots are alive, recreating them if not. Run this in go-routine.
@@ -121,6 +124,8 @@ func (nm *NetworkManager) MonitorChatbots() {
 
 // get a chatbot by id
 func (nm *NetworkManager) getChatbotById(id int) common.ChatBot {
+	nm.RLock()
+	defer nm.RUnlock()
 	return nm.chatbots[id]
 }
 
@@ -147,7 +152,9 @@ func (nm *NetworkManager) restart(botId int) {
 		return
 	}
 
+	nm.Lock()
 	nm.chatbots[botId] = nm.Connect(config)
+	nm.Unlock()
 }
 
 // Stop all bots
