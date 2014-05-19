@@ -123,8 +123,7 @@ func (bot *ircBot) monitor() {
 			case <-time.After(time.Second * 10):
 				glog.Infoln("No pong from ircBot server", bot)
 				// Do not kill the server on the first missed PONG
-				// 3 chances 15/5
-				pongCounter += 5
+				pongCounter += 15
 			}
 		}
 	}
