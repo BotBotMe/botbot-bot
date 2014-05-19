@@ -405,8 +405,8 @@ func (bot *ircBot) sender() {
 
 		_, err = bot.socket.Write(data)
 		if err != nil {
-			glog.Errorln("Error writing to socket", err)
-			bot.Close()
+			glog.Errorln("Error writing to socket to", bot, ": ", err)
+			bot.reconnect()
 		}
 
 		// Rate limit to one message every 2 seconds
