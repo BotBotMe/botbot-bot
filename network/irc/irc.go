@@ -12,6 +12,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"crypto/x509"
+	"expvar"
 	"fmt"
 	"io"
 	"net"
@@ -50,6 +51,7 @@ type ircBot struct {
 	monitorChan      chan struct{}
 	pingResponse     chan struct{}
 	reconnectChan    chan struct{}
+	stats            *expvar.Map
 }
 
 func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot {
@@ -73,8 +75,15 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 		pingResponse:  make(chan struct{}),
 		reconnectChan: make(chan struct{}),
 		isRunning:     true,
+		stats:         expvar.NewMap(fmt.Sprintf("%s_%s", config.Config["nick"], config.Config["server"])),
 	}
 
+	chatbot.stats.Add("channels", 0)
+	chatbot.stats.Add("messages", 0)
+	chatbot.stats.Add("ping", 0)
+	chatbot.stats.Add("pong", 0)
+	chatbot.stats.Add("missed_ping", 0)
+	chatbot.stats.Add("restart", 0)
 	chatbot.Init()
 
 	return chatbot
@@ -116,11 +125,13 @@ func (bot *ircBot) monitor() {
 			bot.ping()
 			select {
 			case <-bot.pingResponse:
+				bot.stats.Add("pong", 1)
 				pongCounter += 1
 				if glog.V(1) {
 					glog.Infoln("Pong from ircBot server", bot)
 				}
 			case <-time.After(time.Second * 10):
+				bot.stats.Add("missed_ping", 1)
 				glog.Infoln("No pong from ircBot server", bot)
 				// Do not kill the server on the first missed PONG
 				pongCounter += 15
@@ -132,6 +143,7 @@ func (bot *ircBot) monitor() {
 // reconnect the ircBot
 func (bot *ircBot) reconnect() {
 	glog.Infoln("Trying to reconnect", bot)
+	bot.stats.Add("restart", 1)
 	bot.Close()
 	time.Sleep(1 * time.Second) // Wait for timeout to be sure listen has stopped
 	bot.Init()
@@ -141,6 +153,7 @@ func (bot *ircBot) reconnect() {
 // Ping the server to  the connection open
 func (bot *ircBot) ping() {
 	// TODO increment number
+	bot.stats.Add("ping", 1)
 	bot.SendRaw("PING 1")
 }
 
@@ -348,11 +361,13 @@ func (bot *ircBot) JoinAll() {
 // Join an IRC channel
 func (bot *ircBot) join(channel string) {
 	bot.SendRaw("JOIN " + channel)
+	bot.stats.Add("channels", 1)
 }
 
 // Leave an IRC channel
 func (bot *ircBot) part(channel string) {
 	bot.SendRaw("PART " + channel)
+	bot.stats.Add("channels", -1)
 }
 
 // Send a regular (non-system command) IRC message
@@ -392,7 +407,7 @@ func (bot *ircBot) sendPassword() {
 func (bot *ircBot) sender() {
 
 	var data []byte
-	var twoSeconds = time.Second * 2
+	var tempo = time.Second * 1
 	var err error
 
 	for bot.IsRunning() {
@@ -407,10 +422,11 @@ func (bot *ircBot) sender() {
 			glog.Errorln("Error writing to socket to", bot, ": ", err)
 			bot.reconnect()
 		}
+		bot.stats.Add("messages", 1)
 
-		// Rate limit to one message every 2 seconds
+		// Rate limit to one message every tempo
 		// https://github.com/BotBotMe/botbot-bot/issues/2
-		time.Sleep(twoSeconds)
+		time.Sleep(tempo)
 	}
 }
 

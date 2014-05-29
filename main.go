@@ -1,7 +1,10 @@
 package main
 
 import (
+	_ "expvar"
 	"flag"
+	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -31,6 +34,9 @@ func main() {
 
 	// Start the main loop
 	go botbot.mainLoop()
+
+	// Start and http server to serve the stats from expvar
+	log.Fatal(http.ListenAndServe(":3030", nil))
 
 	// Trap stop signal (Ctrl-C, kill) to exit
 	kill := make(chan os.Signal)
