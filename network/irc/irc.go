@@ -75,7 +75,7 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 		pingResponse:  make(chan struct{}),
 		reconnectChan: make(chan struct{}),
 		isRunning:     true,
-		stats:         expvar.NewMap(fmt.Sprintf("%s_%s", config.Config["nick"], config.Config["server"])),
+		stats:         expvar.NewMap(fmt.Sprintf("%s_%d", config.Config["nick"], config.Id)),
 	}
 
 	chatbot.stats.Add("channels", 0)
