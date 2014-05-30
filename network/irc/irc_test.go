@@ -1,6 +1,7 @@
 package irc
 
 import (
+	"expvar"
 	"strconv"
 	"strings"
 	"testing"
@@ -178,17 +179,19 @@ func TestFlood(t *testing.T) {
 	channels = append(channels, &common.Channel{Name: "test", Fingerprint: "uuid-string"})
 
 	chatbot := &ircBot{
-		id:         99,
-		address:    "localhost",
-		nick:       "test",
-		realname:   "Unit Test",
-		password:   "test",
-		fromServer: fromServer,
-		channels:   channels,
-		socket:     &mockSocket,
-		isRunning:  true,
+		id:                99,
+		address:           "localhost",
+		nick:              "test",
+		realname:          "Unit Test",
+		password:          "test",
+		server_identifier: "localhost.test",
+		fromServer:        fromServer,
+		channels:          channels,
+		socket:            &mockSocket,
+		isRunning:         true,
+		stats:             expvar.NewMap("localhost.test"),
 	}
-	chatbot.init()
+	chatbot.Init()
 
 	startTime := time.Now()
 
@@ -222,16 +225,18 @@ func TestUpdate(t *testing.T) {
 	channels = append(channels, &channel)
 
 	chatbot := &ircBot{
-		id:         99,
-		address:    "localhost",
-		nick:       "test",
-		realname:   "Unit Test",
-		password:   "test",
-		fromServer: fromServer,
-		channels:   channels,
-		socket:     &mockSocket,
-		sendQueue:  make(chan []byte, 100),
-		isRunning:  true,
+		id:                99,
+		address:           "localhost",
+		nick:              "test",
+		realname:          "Unit Test",
+		password:          "test",
+		server_identifier: "localhost.test1",
+		fromServer:        fromServer,
+		channels:          channels,
+		socket:            &mockSocket,
+		sendQueue:         make(chan []byte, 100),
+		isRunning:         true,
+		stats:             expvar.NewMap("localhost.test1"),
 	}
 	// Rate limiting requires a go-routine to actually do the sending
 	go chatbot.sender()

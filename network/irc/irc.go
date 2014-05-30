@@ -35,23 +35,24 @@ const (
 
 type ircBot struct {
 	sync.RWMutex
-	id               int
-	address          string
-	socket           io.ReadWriteCloser
-	nick             string
-	realname         string
-	password         string
-	serverPass       string
-	fromServer       chan *line.Line
-	channels         []*common.Channel
-	isRunning        bool
-	isConnecting     bool
-	isAuthenticating bool
-	sendQueue        chan []byte
-	monitorChan      chan struct{}
-	pingResponse     chan struct{}
-	reconnectChan    chan struct{}
-	stats            *expvar.Map
+	id                int
+	address           string
+	socket            io.ReadWriteCloser
+	nick              string
+	realname          string
+	password          string
+	serverPass        string
+	server_identifier string
+	fromServer        chan *line.Line
+	channels          []*common.Channel
+	isRunning         bool
+	isConnecting      bool
+	isAuthenticating  bool
+	sendQueue         chan []byte
+	monitorChan       chan struct{}
+	pingResponse      chan struct{}
+	reconnectChan     chan struct{}
+	stats             *expvar.Map
 }
 
 func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot {
@@ -63,19 +64,20 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 	}
 
 	chatbot := &ircBot{
-		id:            config.Id,
-		address:       config.Config["server"],
-		nick:          config.Config["nick"],
-		realname:      realname,
-		password:      config.Config["password"],        // NickServ password
-		serverPass:    config.Config["server_password"], // PASS password
-		fromServer:    fromServer,
-		channels:      config.Channels,
-		monitorChan:   make(chan struct{}),
-		pingResponse:  make(chan struct{}),
-		reconnectChan: make(chan struct{}),
-		isRunning:     true,
-		stats:         expvar.NewMap(fmt.Sprintf("%d", config.Id)),
+		id:                config.Id,
+		address:           config.Config["server"],
+		nick:              config.Config["nick"],
+		realname:          realname,
+		password:          config.Config["password"],        // NickServ password
+		serverPass:        config.Config["server_password"], // PASS password
+		server_identifier: config.Config["server_identifier"],
+		fromServer:        fromServer,
+		channels:          config.Channels,
+		monitorChan:       make(chan struct{}),
+		pingResponse:      make(chan struct{}),
+		reconnectChan:     make(chan struct{}),
+		isRunning:         true,
+		stats:             expvar.NewMap(config.Config["server_identifier"]),
 	}
 
 	chatbot.stats.Add("channels", 0)
