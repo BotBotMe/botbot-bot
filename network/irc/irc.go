@@ -82,6 +82,7 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 
 	chatbot.stats.Add("channels", 0)
 	chatbot.stats.Add("messages", 0)
+	chatbot.stats.Add("received_messages", 0)
 	chatbot.stats.Add("ping", 0)
 	chatbot.stats.Add("pong", 0)
 	chatbot.stats.Add("missed_ping", 0)
@@ -472,6 +473,7 @@ func (bot *ircBot) listen() {
 
 		theLine, err := parseLine(content)
 		if err == nil {
+			bot.stats.Add("received_messages", 1)
 			theLine.ChatBotId = bot.id
 			bot.act(theLine)
 		} else {
