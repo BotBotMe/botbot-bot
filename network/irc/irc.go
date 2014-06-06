@@ -17,7 +17,6 @@ import (
 	"io"
 	"net"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,31 +29,34 @@ import (
 )
 
 const (
-	VERSION = "botbotme v0.2"
+	// VERSION of the botbot-bot
+	VERSION           = "botbot v0.3.0"
+	RPL_WHOISCHANNELS = "319"
 )
 
 type ircBot struct {
 	sync.RWMutex
-	id                int
-	address           string
-	socket            io.ReadWriteCloser
-	nick              string
-	realname          string
-	password          string
-	serverPass        string
-	server_identifier string
-	fromServer        chan *line.Line
-	channels          []*common.Channel
-	isRunning         bool
-	isConnecting      bool
-	isAuthenticating  bool
-	sendQueue         chan []byte
-	monitorChan       chan struct{}
-	pingResponse      chan struct{}
-	reconnectChan     chan struct{}
-	stats             *expvar.Map
+	id               int
+	address          string
+	socket           io.ReadWriteCloser
+	nick             string
+	realname         string
+	password         string
+	serverPass       string
+	serverIdentifier string
+	channels         []*common.Channel
+	isRunning        bool
+	isConnecting     bool
+	isAuthenticating bool
+	sendQueue        chan []byte
+	fromServer       chan *line.Line
+	monitorChan      chan struct{}
+	pingResponse     chan struct{}
+	reconnectChan    chan struct{}
+	stats            *expvar.Map
 }
 
+// NewBot create an irc instance of ChatBot
 func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot {
 
 	// realname is set to config["realname"] or config["nick"]
@@ -64,22 +66,24 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 	}
 
 	chatbot := &ircBot{
-		id:                config.Id,
-		address:           config.Config["server"],
-		nick:              config.Config["nick"],
-		realname:          realname,
-		password:          config.Config["password"],        // NickServ password
-		serverPass:        config.Config["server_password"], // PASS password
-		server_identifier: config.Config["server_identifier"],
-		fromServer:        fromServer,
-		channels:          config.Channels,
-		monitorChan:       make(chan struct{}),
-		pingResponse:      make(chan struct{}),
-		reconnectChan:     make(chan struct{}),
-		isRunning:         true,
-		stats:             expvar.NewMap(config.Config["server_identifier"]),
+		id:               config.Id,
+		address:          config.Config["server"],
+		nick:             config.Config["nick"],
+		realname:         realname,
+		password:         config.Config["password"],        // NickServ password
+		serverPass:       config.Config["server_password"], // PASS password
+		serverIdentifier: config.Config["server_identifier"],
+		fromServer:       fromServer,
+		channels:         config.Channels,
+		monitorChan:      make(chan struct{}),
+		pingResponse:     make(chan struct{}),
+		reconnectChan:    make(chan struct{}),
+		isRunning:        true,
 	}
 
+	chatbot.stats = expvar.NewMap(chatbot.serverIdentifier)
+
+	// Initialize the counter for the exported variable
 	chatbot.stats.Add("channels", 0)
 	chatbot.stats.Add("messages", 0)
 	chatbot.stats.Add("received_messages", 0)
@@ -87,8 +91,9 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 	chatbot.stats.Add("pong", 0)
 	chatbot.stats.Add("missed_ping", 0)
 	chatbot.stats.Add("restart", 0)
-	chatbot.Init()
+	chatbot.stats.Add("reply_whoischannels", 0)
 
+	chatbot.Init()
 	return chatbot
 }
 
@@ -103,16 +108,17 @@ func (bot *ircBot) String() string {
 // Monitor that we are still connected to the IRC server
 // should run in go-routine
 // If no message is received during 60 actively ping ircBot.
-// If ircBot does not reply try to reconnect
-// If ircBot replied 15 (maxPongWithoutMessage) but we are still not getting
-// messages there is probably something wrong so we are going to try to
-// reconnect.
+// If ircBot does not reply maxPingWithoutResponse times try to reconnect
+// If ircBot does not replymaxPongWithoutMessage but we are still not getting
+// messages there is probably something wrong try to reconnect.
 func (bot *ircBot) monitor() {
 	// TODO maxPongWithoutMessage should probably be a field of ircBot
+	maxPingWithoutResponse := 3
 	maxPongWithoutMessage := 150
 	pongCounter := 0
+	missed_ping := 0
 	for bot.IsRunning() {
-		if pongCounter > maxPongWithoutMessage {
+		if pongCounter > maxPongWithoutMessage || missed_ping > maxPingWithoutResponse {
 			glog.Infoln("More than maxPongWithoutMessage pong without message for", bot)
 			glog.Infoln("IRC monitoring KO", bot)
 			bot.reconnect()
@@ -129,16 +135,25 @@ func (bot *ircBot) monitor() {
 			select {
 			case <-bot.pingResponse:
 				bot.stats.Add("pong", 1)
-				pongCounter += 1
+				pongCounter++
 				if glog.V(1) {
 					glog.Infoln("Pong from ircBot server", bot)
 				}
 			case <-time.After(time.Second * 10):
 				bot.stats.Add("missed_ping", 1)
 				glog.Infoln("No pong from ircBot server", bot)
-				// Do not kill the server on the first missed PONG
-				pongCounter += 15
+				missed_ping++
+
 			}
+		}
+	}
+}
+
+func (bot *ircBot) whoisCollector() {
+	for bot.IsRunning() {
+		select {
+		case <-time.After(time.Minute * 1):
+			bot.Whois()
 		}
 	}
 }
@@ -147,17 +162,12 @@ func (bot *ircBot) monitor() {
 func (bot *ircBot) reconnect() {
 	glog.Infoln("Trying to reconnect", bot)
 	bot.stats.Add("restart", 1)
-	bot.Close()
+	err := bot.Close()
+	if err != nil {
+		glog.Infoln("[Error] An error occured while Closing the bot", bot, ": ", err)
+	}
 	time.Sleep(1 * time.Second) // Wait for timeout to be sure listen has stopped
 	bot.Init()
-
-}
-
-// Ping the server to  the connection open
-func (bot *ircBot) ping() {
-	// TODO increment number
-	bot.stats.Add("ping", 1)
-	bot.SendRaw("PING 1")
 }
 
 // Connect to the IRC server and start listener
@@ -173,6 +183,9 @@ func (bot *ircBot) Init() {
 
 	// Monitor that we are still getting incoming messages in a background thread
 	go bot.monitor()
+
+	// Poll the the bot server to know to which channels we are connected
+	go bot.whoisCollector()
 
 	// Listen for outgoing messages (rate limited) in background thread
 	if bot.sendQueue == nil {
@@ -250,12 +263,11 @@ func isCertValid(conn *tls.Conn) bool {
 		// Cert has single name, the usual case
 		return isIPMatch(cert.Subject.CommonName, connAddr)
 
-	} else {
-		// Cert has several valid names
-		for _, certname := range cert.DNSNames {
-			if isIPMatch(certname, connAddr) {
-				return true
-			}
+	}
+	// Cert has several valid names
+	for _, certname := range cert.DNSNames {
+		if isIPMatch(certname, connAddr) {
+			return true
 		}
 	}
 
@@ -304,7 +316,10 @@ func (bot *ircBot) updateServer(config *common.BotConfig) bool {
 
 	glog.Infoln("Changing IRC server from ", bot.address, " to ", addr)
 
-	bot.Close()
+	err := bot.Close()
+	if err != nil {
+		glog.Infoln("[Error] An error occured while Closing the bot", bot, ": ", err)
+	}
 	time.Sleep(1 * time.Second) // Wait for timeout to be sure listen has stopped
 
 	bot.address = addr
@@ -359,6 +374,18 @@ func (bot *ircBot) JoinAll() {
 	for _, channel := range bot.channels {
 		bot.join(channel.Credential())
 	}
+}
+
+// Ping the server to  the connection open
+func (bot *ircBot) ping() {
+	// TODO increment number
+	bot.stats.Add("ping", 1)
+	bot.SendRaw("PING 1")
+}
+
+// Whois is used to query information about the bot
+func (bot *ircBot) Whois() {
+	bot.SendRaw("WHOIS " + bot.nick)
 }
 
 // Join an IRC channel
@@ -417,7 +444,7 @@ func (bot *ircBot) sender() {
 
 		data = <-bot.sendQueue
 		if glog.V(1) {
-			glog.Infoln("[RAW"+strconv.Itoa(bot.id)+"] -->", string(data))
+			glog.Infoln("[RAW", bot, "] -->", string(data))
 		}
 
 		_, err = bot.socket.Write(data)
@@ -456,7 +483,10 @@ func (bot *ircBot) listen() {
 
 			} else {
 				glog.Errorln("Lost IRC server connection. ", err)
-				bot.Close()
+				err := bot.Close()
+				if err != nil {
+					glog.Infoln("[Error] An error occured while Closing the bot", bot, ": ", err)
+				}
 				return
 			}
 		}
@@ -468,7 +498,7 @@ func (bot *ircBot) listen() {
 		content = toUnicode(contentData)
 
 		if glog.V(2) {
-			glog.Infoln("[RAW" + strconv.Itoa(bot.id) + "]" + content)
+			glog.Infoln("[RAW", bot.String(), "]"+content)
 		}
 
 		theLine, err := parseLine(content)
@@ -544,6 +574,10 @@ func (bot *ircBot) act(theLine *line.Line) {
 	} else if theLine.Command == "VERSION" {
 		versionMsg := "NOTICE " + theLine.User + " :\u0001VERSION " + VERSION + "\u0001\n"
 		bot.SendRaw(versionMsg)
+	} else if theLine.Command == RPL_WHOISCHANNELS {
+		glog.Infoln("[Info] reply_whoischannels -- len:",
+			len(strings.Split(theLine.Content, " ")), "content:", theLine.Content)
+		bot.stats.Add("reply_whoischannels", int64(len(strings.Split(theLine.Content, " "))))
 	}
 
 	bot.fromServer <- theLine
@@ -588,8 +622,7 @@ func (bot *ircBot) sendShutdown() {
 // Split a string into sorted array of strings:
 // e.g. "#bob, #alice" becomes ["#alice", "#bob"]
 func splitChannels(rooms string) []string {
-
-	var channels []string = make([]string, 0)
+	var channels = make([]string, 0)
 	for _, s := range strings.Split(rooms, ",") {
 		channels = append(channels, strings.TrimSpace(s))
 	}
@@ -741,10 +774,10 @@ func toUnicode(data []byte) string {
 
 // Are a and b equal?
 func isEqual(a, b []*common.Channel) (flag bool) {
-	for _, a_cc := range a {
+	for _, aCc := range a {
 		flag = false
-		for _, b_cc := range b {
-			if a_cc.Fingerprint == b_cc.Fingerprint {
+		for _, bCc := range b {
+			if aCc.Fingerprint == bCc.Fingerprint {
 				flag = true
 				break
 			}
@@ -757,10 +790,10 @@ func isEqual(a, b []*common.Channel) (flag bool) {
 }
 
 // Is a in b? container must be sorted
-func isIn(a *common.Channel, container []*common.Channel) (flag bool) {
+func isIn(a *common.Channel, channels []*common.Channel) (flag bool) {
 	flag = false
-	for _, c_cc := range container {
-		if a.Fingerprint == c_cc.Fingerprint {
+	for _, cc := range channels {
+		if a.Fingerprint == cc.Fingerprint {
 			flag = true
 			break
 		}
