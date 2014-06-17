@@ -778,7 +778,6 @@ func isEqual(a, b []*common.Channel) (flag bool) {
 		for _, aCc := range a {
 			flag = false
 			for _, bCc := range b {
-					aCc.Name, aCc.Fingerprint, "==", bCc.Name, bCc.Fingerprint)
 				if aCc.Fingerprint == bCc.Fingerprint {
 					flag = true
 					break
