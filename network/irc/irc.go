@@ -774,19 +774,24 @@ func toUnicode(data []byte) string {
 
 // Are a and b equal?
 func isEqual(a, b []*common.Channel) (flag bool) {
-	for _, aCc := range a {
-		flag = false
-		for _, bCc := range b {
-			if aCc.Fingerprint == bCc.Fingerprint {
-				flag = true
-				break
+	if len(a) == len(b) {
+		for _, aCc := range a {
+			flag = false
+			for _, bCc := range b {
+					aCc.Name, aCc.Fingerprint, "==", bCc.Name, bCc.Fingerprint)
+				if aCc.Fingerprint == bCc.Fingerprint {
+					flag = true
+					break
+				}
+			}
+			if flag == false {
+				return flag
 			}
 		}
-		if flag == false {
-			return flag
-		}
+		return true
+	} else {
+		return false
 	}
-	return true
 }
 
 // Is a in b? container must be sorted
