@@ -46,7 +46,7 @@ func (nm *NetworkManager) GetUserByChatbotId(id int) string {
 // Connect to networks / start chatbots. Loads chatbot configuration from DB.
 func (nm *NetworkManager) RefreshChatbots() {
 	nm.Lock()
-	nm.Unlock()
+	defer nm.Unlock()
 	if glog.V(2) {
 		glog.Infoln("Entering in NetworkManager.RefreshChatbots")
 	}
