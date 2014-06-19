@@ -13,6 +13,13 @@ const (
 	TEST_MSG    = "q: Something new"
 )
 
+func GetQueueLength(queue *common.MockQueue) int {
+	queue.RLock()
+	q := queue.Got["q"]
+	queue.RUnlock()
+	return len(q)
+}
+
 // A serious integration test for BotBot.
 // This covers BotBot, the IRC code, and the dispatcher.
 func TestBotBotIRC(t *testing.T) {
@@ -61,19 +68,21 @@ func TestBotBotIRC(t *testing.T) {
 	botbot.shutdown()
 
 	tries := 0
-	for len(queue.Got["q"]) < 4 && tries < 20 {
-		time.Sleep(50 * time.Millisecond)
+	for GetQueueLength(queue) < 4 && tries < 20 {
+		time.Sleep(100 * time.Millisecond)
 		tries++
 	}
 
+	queue.RLock()
 	checkContains(queue.Got["q"], "SHUTDOWN", t)
+	queue.RUnlock()
 }
 
 // Block until len(target.Get) is at least val, or timeout
 func waitForServer(target *common.MockIRCServer, val int) {
 
 	tries := 0
-	for target.GotLength() < val && tries < 30 {
+	for target.GotLength() < val && tries < 60 {
 		time.Sleep(200 * time.Millisecond)
 		tries++
 	}
