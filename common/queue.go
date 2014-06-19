@@ -4,9 +4,10 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"time"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/monnand/goredis"
@@ -40,6 +41,7 @@ type Queue interface {
 
 // Simplistic Queue implementation used by the test suite
 type MockQueue struct {
+	sync.RWMutex
 	Got         map[string][]string
 	ReadChannel chan string
 }
@@ -51,23 +53,29 @@ func NewMockQueue() *MockQueue {
 	}
 }
 
-func (self *MockQueue) Publish(queue string, message []byte) error {
-	self.Got[queue] = append(self.Got[queue], string(message))
+func (mq *MockQueue) Publish(queue string, message []byte) error {
+	mq.Lock()
+	defer mq.Unlock()
+	mq.Got[queue] = append(mq.Got[queue], string(message))
 	return nil
 }
 
-func (self *MockQueue) Rpush(key string, val []byte) error {
-	self.Got[key] = append(self.Got[key], string(val))
+func (mq *MockQueue) Rpush(key string, val []byte) error {
+	mq.Lock()
+	defer mq.Unlock()
+	mq.Got[key] = append(mq.Got[key], string(val))
 	return nil
 }
 
-func (self *MockQueue) Blpop(keys []string, timeoutsecs uint) (*string, []byte, error) {
-	val := <-self.ReadChannel
+func (mq *MockQueue) Blpop(keys []string, timeoutsecs uint) (*string, []byte, error) {
+	val := <-mq.ReadChannel
 	return &keys[0], []byte(val), nil
 }
 
-func (self *MockQueue) Llen(key string) (int, error) {
-	return len(self.Got), nil
+func (mq *MockQueue) Llen(key string) (int, error) {
+	mq.RLock()
+	defer mq.RUnlock()
+	return len(mq.Got), nil
 }
 
 func (self *MockQueue) Ltrim(key string, start int, end int) error {

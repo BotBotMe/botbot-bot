@@ -44,6 +44,7 @@ type ircBot struct {
 	password         string
 	serverPass       string
 	serverIdentifier string
+	rateLimit        time.Duration // Duration used to rate limit send
 	channels         []*common.Channel
 	isRunning        bool
 	isConnecting     bool
@@ -73,6 +74,7 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 		password:         config.Config["password"],        // NickServ password
 		serverPass:       config.Config["server_password"], // PASS password
 		serverIdentifier: config.Config["server_identifier"],
+		rateLimit:        time.Second,
 		fromServer:       fromServer,
 		channels:         config.Channels,
 		monitorChan:      make(chan struct{}),
@@ -141,8 +143,8 @@ func (bot *ircBot) monitor() {
 				}
 			case <-time.After(time.Second * 10):
 				bot.stats.Add("missed_ping", 1)
-				glog.Infoln("No pong from ircBot server", bot)
 				missed_ping++
+				glog.Infoln("No pong from ircBot server", bot, "missed", missed_ping)
 
 			}
 		}
@@ -437,7 +439,6 @@ func (bot *ircBot) sendPassword() {
 func (bot *ircBot) sender() {
 
 	var data []byte
-	var tempo = time.Second * 1
 	var err error
 
 	for bot.IsRunning() {
@@ -456,7 +457,7 @@ func (bot *ircBot) sender() {
 
 		// Rate limit to one message every tempo
 		// https://github.com/BotBotMe/botbot-bot/issues/2
-		time.Sleep(tempo)
+		time.Sleep(bot.rateLimit)
 	}
 }
 

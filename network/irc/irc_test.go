@@ -4,6 +4,7 @@ import (
 	"expvar"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -146,25 +147,36 @@ func TestParseLine_353(t *testing.T) {
 
 // Dummy implementation of ReadWriteCloser
 type MockSocket struct {
+	sync.RWMutex
 	received []string
 	counter  chan bool
 }
 
-func (self *MockSocket) Write(data []byte) (int, error) {
-	self.received = append(self.received, string(data))
-	if self.counter != nil {
-		self.counter <- true
+func (sock *MockSocket) Write(data []byte) (int, error) {
+	sock.Lock()
+	defer sock.Unlock()
+	sock.received = append(sock.received, string(data))
+	if sock.counter != nil {
+		sock.counter <- true
 	}
 	return len(data), nil
 }
 
-func (self *MockSocket) Read(into []byte) (int, error) {
+func (sock *MockSocket) Read(into []byte) (int, error) {
+	sock.RLock()
+	defer sock.RUnlock()
 	time.Sleep(time.Second) // Prevent busy loop
 	return 0, nil
 }
 
-func (self *MockSocket) Close() error {
+func (sock *MockSocket) Close() error {
 	return nil
+}
+
+func (sock *MockSocket) receivedLength() int {
+	sock.RLock()
+	defer sock.RUnlock()
+	return len(sock.received)
 }
 
 // Test sending messages too fast
@@ -185,6 +197,7 @@ func TestFlood(t *testing.T) {
 		realname:         "Unit Test",
 		password:         "test",
 		serverIdentifier: "localhost.test",
+		rateLimit:        time.Second,
 		fromServer:       fromServer,
 		channels:         channels,
 		socket:           &mockSocket,
@@ -251,7 +264,7 @@ func TestUpdate(t *testing.T) {
 	// Wait a bit
 	for i := 0; i < 10; i++ {
 		time.Sleep(time.Second / 3)
-		if len(mockSocket.received) >= 1 {
+		if mockSocket.receivedLength() >= 1 {
 			break
 		}
 	}

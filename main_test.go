@@ -1,10 +1,11 @@
 package main
 
 import (
-	"github.com/BotBotMe/botbot-bot/common"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/BotBotMe/botbot-bot/common"
 )
 
 const (
@@ -36,7 +37,11 @@ func TestBotBotIRC(t *testing.T) {
 	queue.ReadChannel <- "WRITE 1 #unit I am a plugin response"
 	waitForServer(server, 6)
 
-	checkContains(queue.Got["q"], TEST_MSG, t)
+	queue.RLock()
+	q := queue.Got["q"]
+	queue.RUnlock()
+
+	checkContains(q, TEST_MSG, t)
 
 	// Check IRC server expectations
 
@@ -68,7 +73,7 @@ func TestBotBotIRC(t *testing.T) {
 func waitForServer(target *common.MockIRCServer, val int) {
 
 	tries := 0
-	for len(target.Got) < val && tries < 30 {
+	for target.GotLength() < val && tries < 30 {
 		time.Sleep(200 * time.Millisecond)
 		tries++
 	}
