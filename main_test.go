@@ -45,8 +45,8 @@ func TestBotBotIRC(t *testing.T) {
 
 	// Check IRC server expectations
 
-	if len(server.Got) != 6 {
-		t.Fatal("Expected exactly 6 IRC messages from the bot. Got ", len(server.Got))
+	if server.GotLength() != 6 {
+		t.Fatal("Expected exactly 6 IRC messages from the bot. Got ", server.GotLength())
 	}
 
 	expect := []string{"PING", "USER", "NICK", "NickServ", "JOIN", "PRIVMSG"}
