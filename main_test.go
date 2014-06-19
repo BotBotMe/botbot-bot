@@ -68,7 +68,7 @@ func TestBotBotIRC(t *testing.T) {
 	botbot.shutdown()
 
 	tries := 0
-	for GetQueueLength(queue) < 4 && tries < 100 {
+	for GetQueueLength(queue) < 4 && tries < 200 {
 		time.Sleep(50 * time.Millisecond)
 		tries++
 	}
@@ -82,7 +82,7 @@ func TestBotBotIRC(t *testing.T) {
 func waitForServer(target *common.MockIRCServer, val int) {
 
 	tries := 0
-	for target.GotLength() < val && tries < 100 {
+	for target.GotLength() < val && tries < 200 {
 		time.Sleep(50 * time.Millisecond)
 		tries++
 	}
