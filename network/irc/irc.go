@@ -34,6 +34,27 @@ const (
 	RPL_WHOISCHANNELS = "319"
 )
 
+type chatBotStats struct {
+	sync.Mutex
+	m map[string]*expvar.Map
+}
+
+func (s chatBotStats) GetOrCreate(identifier string) (*expvar.Map, bool) {
+	s.Lock()
+	defer s.Unlock()
+	chatbotStats, ok := s.m[identifier]
+	if !ok {
+		chatbotStats = expvar.NewMap(identifier)
+		s.m[identifier] = chatbotStats
+	}
+	return chatbotStats, ok
+
+}
+
+var (
+	BotStats = chatBotStats{m: make(map[string]*expvar.Map)}
+)
+
 type ircBot struct {
 	sync.RWMutex
 	id               int
@@ -54,7 +75,6 @@ type ircBot struct {
 	monitorChan      chan struct{}
 	pingResponse     chan struct{}
 	reconnectChan    chan struct{}
-	stats            *expvar.Map
 }
 
 // NewBot create an irc instance of ChatBot
@@ -83,17 +103,19 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 		isRunning:        true,
 	}
 
-	chatbot.stats = expvar.NewMap(chatbot.serverIdentifier)
+	chatbotStats, ok := BotStats.GetOrCreate(chatbot.serverIdentifier)
 
 	// Initialize the counter for the exported variable
-	chatbot.stats.Add("channels", 0)
-	chatbot.stats.Add("messages", 0)
-	chatbot.stats.Add("received_messages", 0)
-	chatbot.stats.Add("ping", 0)
-	chatbot.stats.Add("pong", 0)
-	chatbot.stats.Add("missed_ping", 0)
-	chatbot.stats.Add("restart", 0)
-	chatbot.stats.Add("reply_whoischannels", 0)
+	if !ok {
+		chatbotStats.Add("channels", 0)
+		chatbotStats.Add("messages", 0)
+		chatbotStats.Add("received_messages", 0)
+		chatbotStats.Add("ping", 0)
+		chatbotStats.Add("pong", 0)
+		chatbotStats.Add("missed_ping", 0)
+		chatbotStats.Add("restart", 0)
+		chatbotStats.Add("reply_whoischannels", 0)
+	}
 
 	chatbot.Init()
 	return chatbot
@@ -103,6 +125,11 @@ func (bot *ircBot) GetUser() string {
 	return bot.nick
 }
 
+func (bot *ircBot) GetStats() *expvar.Map {
+	stats, _ := BotStats.GetOrCreate(bot.serverIdentifier)
+	return stats
+}
+
 func (bot *ircBot) String() string {
 	return fmt.Sprintf("%s on %s", bot.nick, bot.address)
 }
@@ -110,11 +137,12 @@ func (bot *ircBot) String() string {
 // Monitor that we are still connected to the IRC server
 // should run in go-routine
 // If no message is received during 60 actively ping ircBot.
-// If ircBot does not reply maxPingWithoutResponse times try to reconnect
-// If ircBot does not replymaxPongWithoutMessage but we are still not getting
-// messages there is probably something wrong try to reconnect.
+// If ircBot does not ly maxPingWithoutResponse times try to reconnect
+// If ircBot does  replymaxPongWithoutMessage but we are still not getting
+//   is probably something wrong try to reconnect.
 func (bot *ircBot) monitor() {
 	// TODO maxPongWithoutMessage should probably be a field of ircBot
+	botStats := bot.GetStats()
 	maxPingWithoutResponse := 3
 	maxPongWithoutMessage := 150
 	pongCounter := 0
@@ -136,13 +164,13 @@ func (bot *ircBot) monitor() {
 			bot.ping()
 			select {
 			case <-bot.pingResponse:
-				bot.stats.Add("pong", 1)
+				botStats.Add("pong", 1)
 				pongCounter++
 				if glog.V(1) {
 					glog.Infoln("Pong from ircBot server", bot)
 				}
 			case <-time.After(time.Second * 10):
-				bot.stats.Add("missed_ping", 1)
+				botStats.Add("missed_ping", 1)
 				missed_ping++
 				glog.Infoln("No pong from ircBot server", bot, "missed", missed_ping)
 
@@ -163,7 +191,8 @@ func (bot *ircBot) whoisCollector() {
 // reconnect the ircBot
 func (bot *ircBot) reconnect() {
 	glog.Infoln("Trying to reconnect", bot)
-	bot.stats.Add("restart", 1)
+	botStats := bot.GetStats()
+	botStats.Add("restart", 1)
 	err := bot.Close()
 	if err != nil {
 		glog.Infoln("[Error] An error occured while Closing the bot", bot, ": ", err)
@@ -381,7 +410,8 @@ func (bot *ircBot) JoinAll() {
 // Ping the server to  the connection open
 func (bot *ircBot) ping() {
 	// TODO increment number
-	bot.stats.Add("ping", 1)
+	botStats := bot.GetStats()
+	botStats.Add("ping", 1)
 	bot.SendRaw("PING 1")
 }
 
@@ -393,13 +423,15 @@ func (bot *ircBot) Whois() {
 // Join an IRC channel
 func (bot *ircBot) join(channel string) {
 	bot.SendRaw("JOIN " + channel)
-	bot.stats.Add("channels", 1)
+	botStats := bot.GetStats()
+	botStats.Add("channels", 1)
 }
 
 // Leave an IRC channel
 func (bot *ircBot) part(channel string) {
 	bot.SendRaw("PART " + channel)
-	bot.stats.Add("channels", -1)
+	botStats := bot.GetStats()
+	botStats.Add("channels", -1)
 }
 
 // Send a regular (non-system command) IRC message
@@ -453,7 +485,8 @@ func (bot *ircBot) sender() {
 			glog.Errorln("Error writing to socket to", bot, ": ", err)
 			bot.reconnect()
 		}
-		bot.stats.Add("messages", 1)
+		botStats := bot.GetStats()
+		botStats.Add("messages", 1)
 
 		// Rate limit to one message every tempo
 		// https://github.com/BotBotMe/botbot-bot/issues/2
@@ -504,7 +537,8 @@ func (bot *ircBot) listen() {
 
 		theLine, err := parseLine(content)
 		if err == nil {
-			bot.stats.Add("received_messages", 1)
+			botStats := bot.GetStats()
+			botStats.Add("received_messages", 1)
 			theLine.ChatBotId = bot.id
 			bot.act(theLine)
 		} else {
@@ -578,7 +612,8 @@ func (bot *ircBot) act(theLine *line.Line) {
 	} else if theLine.Command == RPL_WHOISCHANNELS {
 		glog.Infoln("[Info] reply_whoischannels -- len:",
 			len(strings.Split(theLine.Content, " ")), "content:", theLine.Content)
-		bot.stats.Add("reply_whoischannels", int64(len(strings.Split(theLine.Content, " "))))
+		botStats := bot.GetStats()
+		botStats.Add("reply_whoischannels", int64(len(strings.Split(theLine.Content, " "))))
 	}
 
 	bot.fromServer <- theLine

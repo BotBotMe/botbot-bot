@@ -1,7 +1,6 @@
 package irc
 
 import (
-	"expvar"
 	"strconv"
 	"strings"
 	"sync"
@@ -202,7 +201,6 @@ func TestFlood(t *testing.T) {
 		channels:         channels,
 		socket:           &mockSocket,
 		isRunning:        true,
-		stats:            expvar.NewMap("localhost.test"),
 	}
 	chatbot.Init()
 
@@ -249,7 +247,6 @@ func TestUpdate(t *testing.T) {
 		socket:           &mockSocket,
 		sendQueue:        make(chan []byte, 100),
 		isRunning:        true,
-		stats:            expvar.NewMap("localhost.test1"),
 	}
 	// Rate limiting requires a go-routine to actually do the sending
 	go chatbot.sender()
