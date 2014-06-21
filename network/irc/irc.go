@@ -78,7 +78,7 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 		fromServer:       fromServer,
 		channels:         config.Channels,
 		monitorChan:      make(chan struct{}),
-		pingResponse:     make(chan struct{}),
+		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
 		reconnectChan:    make(chan struct{}),
 		isRunning:        true,
 	}
