@@ -11,6 +11,8 @@ import (
 
 	"github.com/BotBotMe/botbot-bot/common"
 	"github.com/golang/glog"
+	_ "net/http/pprof"
+
 )
 
 const (
