@@ -155,7 +155,7 @@ func (bot *ircBot) monitor() {
 	for {
 		select {
 		case <-bot.closing:
-			break
+			return
 		case <-reconnect:
 			glog.Infoln("IRC monitoring KO", bot)
 			bot.reconnect()
@@ -222,6 +222,8 @@ func (bot *ircBot) reconnect() {
 func (bot *ircBot) Init() {
 	bot.Lock()
 	defer bot.Unlock()
+
+	glog.Infoln("Init bot", bot)
 	bot.closing = make(chan struct{})
 	bot.isConnecting = true
 	bot.isAuthenticating = false
@@ -255,13 +257,17 @@ func (bot *ircBot) Init() {
 func (bot *ircBot) Connect() {
 
 	// TODO (yml) remove eventually
-	if bot.socket != nil {
-		glog.Infoln("[Info] bot.socket already set, do not attempt to Connect")
-		return
-	}
+	// if bot.socket != nil {
+	// 	glog.Infoln("[Info] bot.socket already set, do not attempt to Connect")
+	// 	return
+	// }
 
-	var socket net.Conn
-	var err error
+	var (
+		socket net.Conn
+		err error
+		counter int
+	)
+
 	connectTimeout := time.After(0)
 
 	for {
@@ -269,6 +275,7 @@ func (bot *ircBot) Connect() {
 		case <-bot.closing:
 			return
 		case <-connectTimeout:
+			counter++
 			glog.Infoln("Connecting to IRC server: ", bot.address)
 
 			bot.socket, err = tls.Dial("tcp", bot.address, nil) // Always try TLS first
@@ -297,8 +304,9 @@ func (bot *ircBot) Connect() {
 				glog.Infoln("Connected: Plain text insecure")
 				return
 			}
-			glog.Infoln("IRC Connect error. Will attempt to re-connect. ", err)
-			connectTimeout = time.After(5 * time.Second)
+			delay := 5 * counter
+			glog.Infoln("IRC Connect error. Will attempt to re-connect. ", err, "in", delay, "seonds")
+			connectTimeout = time.After(time.Duration(delay) * time.Second)
 		}
 	}
 }
@@ -669,9 +677,9 @@ func (bot *ircBot) Close() error {
 
 	bot.sendShutdown()
 
-	glog.Infoln("[Info] Closing bot socket.")
 	var err error
 	if bot.socket != nil {
+		glog.Infoln("[Info] Closing bot socket.")
 		err = bot.socket.Close()
 		bot.socket = nil
 	}
