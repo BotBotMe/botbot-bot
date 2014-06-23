@@ -254,6 +254,7 @@ func (bot *ircBot) Init() {
 // to Dial to the server.
 func (bot *ircBot) Connect() {
 
+	// TODO (yml) remove eventually
 	if bot.socket != nil {
 		glog.Infoln("[Info] bot.socket already set, do not attempt to Connect")
 		return
@@ -261,42 +262,45 @@ func (bot *ircBot) Connect() {
 
 	var socket net.Conn
 	var err error
+	connectTimeout := time.After(0)
 
 	for {
-		glog.Infoln("Connecting to IRC server: ", bot.address)
+		select {
+		case <-bot.closing:
+			return
+		case <-connectTimeout:
+			glog.Infoln("Connecting to IRC server: ", bot.address)
 
-		socket, err = tls.Dial("tcp", bot.address, nil) // Always try TLS first
-		if err == nil {
-			glog.Infoln("Connected: TLS secure")
-			break
-		}
-
-		glog.Infoln("Could not connect using TLS because: ", err)
-
-		_, ok := err.(x509.HostnameError)
-		if ok {
-			// Certificate might not match. This happens on irc.cloudfront.net
-			insecure := &tls.Config{InsecureSkipVerify: true}
-			socket, err = tls.Dial("tcp", bot.address, insecure)
-
-			if err == nil && isCertValid(socket.(*tls.Conn)) {
-				glog.Infoln("Connected: TLS with awkward certificate")
-				break
+			bot.socket, err = tls.Dial("tcp", bot.address, nil) // Always try TLS first
+			if err == nil {
+				glog.Infoln("Connected: TLS secure")
+				return
 			}
+
+			glog.Infoln("Could not connect using TLS because: ", err)
+
+			_, ok := err.(x509.HostnameError)
+			if ok {
+				// Certificate might not match. This happens on irc.cloudfront.net
+				insecure := &tls.Config{InsecureSkipVerify: true}
+				bot.socket, err = tls.Dial("tcp", bot.address, insecure)
+
+				if err == nil && isCertValid(socket.(*tls.Conn)) {
+					glog.Infoln("Connected: TLS with awkward certificate")
+					return
+				}
+			}
+
+			bot.socket, err = net.Dial("tcp", bot.address)
+
+			if err == nil {
+				glog.Infoln("Connected: Plain text insecure")
+				return
+			}
+			glog.Infoln("IRC Connect error. Will attempt to re-connect. ", err)
+			connectTimeout = time.After(5 * time.Second)
 		}
-
-		socket, err = net.Dial("tcp", bot.address)
-
-		if err == nil {
-			glog.Infoln("Connected: Plain text insecure")
-			break
-		}
-
-		glog.Infoln("IRC Connect error. Will attempt to re-connect. ", err)
-		time.Sleep(10 * time.Second)
 	}
-
-	bot.socket = socket
 }
 
 /* Check that the TLS connection's certficate can be applied to this connection.
