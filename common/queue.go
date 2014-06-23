@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/BotBotMe/botbot-bot/log"
 	"github.com/monnand/goredis"
 )
 
@@ -98,16 +98,16 @@ type RedisQueue struct {
 func NewRedisQueue() Queue {
 	redisUrlString := os.Getenv("REDIS_PLUGIN_QUEUE_URL")
 	if redisUrlString == "" {
-		glog.Fatal("REDIS_PLUGIN_QUEUE_URL cannot be empty.\nexport REDIS_PLUGIN_QUEUE_URL=redis://host:port/db_number")
+		log.Log.Fatal("REDIS_PLUGIN_QUEUE_URL cannot be empty.\nexport REDIS_PLUGIN_QUEUE_URL=redis://host:port/db_number")
 	}
 	redisUrl, err := url.Parse(redisUrlString)
 	if err != nil {
-		glog.Fatal("Could not read Redis string", err)
+		log.Log.Fatal("Could not read Redis string", err)
 	}
 
 	redisDb, err := strconv.Atoi(strings.TrimLeft(redisUrl.Path, "/"))
 	if err != nil {
-		glog.Fatal("Could not read Redis path", err)
+		log.Log.Fatal("Could not read Redis path", err)
 	}
 
 	redisQueue := goredis.Client{Addr: redisUrl.Host, Db: redisDb}
@@ -120,7 +120,7 @@ func (self *RedisQueue) waitForRedis() {
 
 	_, err := self.queue.Ping()
 	for err != nil {
-		glog.Errorln("Waiting for redis...")
+		log.Log.Errorln("Waiting for redis...")
 		time.Sleep(1 * time.Second)
 
 		_, err = self.queue.Ping()

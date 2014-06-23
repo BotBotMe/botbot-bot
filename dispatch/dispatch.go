@@ -1,10 +1,9 @@
 package dispatch
 
 import (
-	"github.com/golang/glog"
-
 	"github.com/BotBotMe/botbot-bot/common"
 	"github.com/BotBotMe/botbot-bot/line"
+	"github.com/BotBotMe/botbot-bot/log"
 )
 
 const (
@@ -29,7 +28,7 @@ func (self *Dispatcher) Dispatch(l *line.Line) {
 	var err error
 	err = self.queue.Rpush(QUEUE_PREFIX, l.AsJson())
 	if err != nil {
-		glog.Fatal("Error writing (RPUSH) to queue. ", err)
+		log.Log.Fatal("Error writing (RPUSH) to queue. ", err)
 	}
 	self.limitQueue(QUEUE_PREFIX)
 }
@@ -39,7 +38,7 @@ func (self *Dispatcher) limitQueue(key string) {
 
 	size, err := self.queue.Llen(key)
 	if err != nil {
-		glog.Fatal("Error LLEN on queue. ", err)
+		log.Log.Fatal("Error LLEN on queue. ", err)
 	}
 
 	if size < MAX_QUEUE_SIZE {
@@ -48,7 +47,7 @@ func (self *Dispatcher) limitQueue(key string) {
 
 	err = self.queue.Ltrim(key, 0, MAX_QUEUE_SIZE)
 	if err != nil {
-		glog.Fatal("Error LTRIM on queue. ", err)
+		log.Log.Fatal("Error LTRIM on queue. ", err)
 	}
 }
 

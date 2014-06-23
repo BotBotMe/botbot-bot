@@ -5,11 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
-
 	"github.com/BotBotMe/botbot-bot/common"
 	"github.com/BotBotMe/botbot-bot/dispatch"
 	"github.com/BotBotMe/botbot-bot/line"
+	"github.com/BotBotMe/botbot-bot/log"
 	"github.com/BotBotMe/botbot-bot/network"
 	"github.com/BotBotMe/botbot-bot/user"
 )
@@ -61,12 +60,10 @@ func (self *BotBot) listen(queueName string) {
 	for {
 		_, msg, err = self.queue.Blpop([]string{queueName}, 0)
 		if err != nil {
-			glog.Fatal("Error reading (BLPOP) from queue. ", err)
+			log.Log.Fatal("Error reading (BLPOP) from queue. ", err)
 		}
 		if len(msg) != 0 {
-			if glog.V(1) {
-				glog.Infoln("Command: ", string(msg))
-			}
+			log.Log.Infoln("Command: ", string(msg))
 			self.fromBus <- string(msg)
 		}
 	}
@@ -121,17 +118,13 @@ func (self *BotBot) mainLoop() {
 //  - WRITE <chatbotid> <channel> <msg>: Send message to server
 //  - REFRESH: Reload plugin configuration
 func (self *BotBot) handleCommand(cmd string, args string) {
-	if glog.V(2) {
-		glog.Infoln("HandleCommand:", cmd)
-	}
+	log.Log.Debugln("HandleCommand:", cmd)
 	switch cmd {
 	case "WRITE":
 		parts := strings.SplitN(args, " ", 3)
 		chatbotId, err := strconv.Atoi(parts[0])
 		if err != nil {
-			if glog.V(1) {
-				glog.Errorln("Invalid chatbot id: ", parts[0])
-			}
+			log.Log.Errorln("Invalid chatbot id: ", parts[0])
 			return
 		}
 
@@ -150,9 +143,7 @@ func (self *BotBot) handleCommand(cmd string, args string) {
 		self.dis.Dispatch(internalLine)
 
 	case "REFRESH":
-		if glog.V(1) {
-			glog.Infoln("Reloading configuration from database")
-		}
+		log.Log.Infoln("Reloading configuration from database")
 		self.netMan.RefreshChatbots()
 	}
 }
@@ -162,7 +153,7 @@ func (self *BotBot) recordUserCounts() {
 
 	for {
 
-		for ch, _ := range self.users.Channels() {
+		for ch := range self.users.Channels() {
 			self.storage.SetCount(ch, self.users.Count(ch))
 		}
 		time.Sleep(1 * time.Hour)

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/golang/glog"
+	"github.com/BotBotMe/botbot-bot/log"
 )
 
 var (
@@ -34,7 +34,7 @@ func (self *Line) String() string {
 func (self *Line) AsJson() []byte {
 	jsonData, err := json.Marshal(self)
 	if err != nil {
-		glog.Infoln("Error on json Marshal of "+self.Raw, err)
+		log.Log.Infoln("Error on json Marshal of "+self.Raw, err)
 	}
 	// client expects lines to have an ending
 	jsonData = append(jsonData, '\n')

@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/BotBotMe/botbot-bot/log"
 	"github.com/lib/pq"
 )
 
@@ -56,19 +56,17 @@ type PostgresStorage struct {
 // Connect to the database.
 func NewPostgresStorage() *PostgresStorage {
 	postgresUrlString := os.Getenv("STORAGE_URL")
-	if glog.V(2) {
-		glog.Infoln("postgresUrlString: ", postgresUrlString)
-	}
+	log.Log.Debugln("postgresUrlString: ", postgresUrlString)
 	if postgresUrlString == "" {
-		glog.Fatal("STORAGE_URL cannot be empty.\nexport STORAGE_URL=postgres://user:password@host:port/db_name")
+		log.Log.Fatal("STORAGE_URL cannot be empty.\nexport STORAGE_URL=postgres://user:password@host:port/db_name")
 	}
 	dataSource, err := pq.ParseURL(postgresUrlString)
 	if err != nil {
-		glog.Fatal("Could not read database string", err)
+		log.Log.Fatal("Could not read database string", err)
 	}
 	db, err := sql.Open("postgres", dataSource+" sslmode=disable fallback_application_name=bot")
 	if err != nil {
-		glog.Fatal("Could not connect to database.", err)
+		log.Log.Fatal("Could not connect to database.", err)
 	}
 
 	// The following 2 lines mitigate the leak of postgresql connection leak
@@ -90,7 +88,7 @@ func (self *PostgresStorage) BotConfig() []*BotConfig {
 	sql := "SELECT id, server, server_password, nick, password, real_name, server_identifier FROM bots_chatbot WHERE is_active=true"
 	rows, err = self.db.Query(sql)
 	if err != nil {
-		glog.Fatal("Error running: ", sql, " ", err)
+		log.Log.Fatal("Error running: ", sql, " ", err)
 	}
 	defer rows.Close()
 
@@ -118,11 +116,11 @@ func (self *PostgresStorage) BotConfig() []*BotConfig {
 		}
 
 		configs = append(configs, config)
-		glog.Infoln("config.Id:", config.Id)
+		log.Log.Infoln("config.Id:", config.Id)
 	}
 	channelStmt, err := self.db.Prepare("SELECT id, name, password, fingerprint FROM bots_channel WHERE is_active=true and chatbot_id=$1")
 	if err != nil {
-		glog.Fatal("[Error] Error while preparing the statements to retrieve the channel:", err)
+		log.Log.Fatal("[Error] Error while preparing the statements to retrieve the channel:", err)
 	}
 	defer channelStmt.Close()
 
@@ -130,7 +128,7 @@ func (self *PostgresStorage) BotConfig() []*BotConfig {
 		config := configs[i]
 		rows, err = channelStmt.Query(config.Id)
 		if err != nil {
-			glog.Fatal("Error running:", err)
+			log.Log.Fatal("Error running:", err)
 		}
 		defer rows.Close()
 
@@ -142,7 +140,7 @@ func (self *PostgresStorage) BotConfig() []*BotConfig {
 				&Channel{Id: channelId, Name: channelName,
 					Pwd: channelPwd, Fingerprint: channelFingerprint})
 		}
-		glog.Infoln("config.Channel:", config.Channels)
+		log.Log.Infoln("config.Channel:", config.Channels)
 	}
 
 	return configs
@@ -213,7 +211,7 @@ func (self *PostgresStorage) channelId(name string) (int, error) {
 	rows.Scan(&channelId)
 
 	if rows.Next() {
-		glog.Fatal("More than one result. "+
+		log.Log.Fatal("More than one result. "+
 			"Same name channels on different nets not yet supported. ", query)
 	}
 

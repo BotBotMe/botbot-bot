@@ -16,7 +16,7 @@ func init() {
 	)
 
 	flag.StringVar(&formatter, "log-formatter", "text", "Formatter name")
-	flag.StringVar(&level, "log-level", "INFO", "Log level [DEBUG, INFO, WARN, ERROR]")
+	flag.StringVar(&level, "log-level", "DEBUG", "Log level [DEBUG, INFO, WARN, ERROR]")
 
 	flag.Parse()
 

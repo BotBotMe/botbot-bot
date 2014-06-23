@@ -4,10 +4,9 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/golang/glog"
-
 	"github.com/BotBotMe/botbot-bot/common"
 	"github.com/BotBotMe/botbot-bot/line"
+	"github.com/BotBotMe/botbot-bot/log"
 	"github.com/BotBotMe/botbot-bot/network/irc"
 )
 
@@ -46,9 +45,7 @@ func (nm *NetworkManager) GetUserByChatbotId(id int) string {
 func (nm *NetworkManager) RefreshChatbots() {
 	nm.Lock()
 	defer nm.Unlock()
-	if glog.V(2) {
-		glog.Infoln("Entering in NetworkManager.RefreshChatbots")
-	}
+	log.Log.Debugln("Entering in NetworkManager.RefreshChatbots")
 	botConfigs := nm.storage.BotConfig()
 
 	var current common.ChatBot
@@ -63,15 +60,11 @@ func (nm *NetworkManager) RefreshChatbots() {
 		current = nm.chatbots[id]
 		if current == nil {
 			// Create
-			if glog.V(2) {
-				glog.Infoln("Connect the bot with the following config:", config)
-			}
+			log.Log.Debugln("Connect the bot with the following config:", config)
 			nm.chatbots[id] = nm.Connect(config)
 		} else {
 			// Update
-			if glog.V(2) {
-				glog.Infoln("Update the bot with the following config:", config)
-			}
+			log.Log.Debugln("Update the bot with the following config:", config)
 			nm.chatbots[id].Update(config)
 		}
 
@@ -84,21 +77,19 @@ func (nm *NetworkManager) RefreshChatbots() {
 	for currId := range nm.chatbots {
 
 		if active.Search(currId) == numActive { // if currId not in active:
-			glog.Infoln("Stopping chatbot: ", currId)
+			log.Log.Infoln("Stopping chatbot: ", currId)
 
 			nm.chatbots[currId].Close()
 			delete(nm.chatbots, currId)
 		}
 	}
-	if glog.V(2) {
-		glog.Infoln("Exiting NetworkManager.RefreshChatbots")
-	}
+	log.Log.Debugln("Exiting NetworkManager.RefreshChatbots")
 
 }
 
 func (nm *NetworkManager) Connect(config *common.BotConfig) common.ChatBot {
 
-	glog.Infoln("Creating chatbot as:,", config)
+	log.Log.Infoln("Creating chatbot as:,", config)
 	return irc.NewBot(config, nm.fromServer)
 }
 
@@ -132,7 +123,7 @@ func (nm *NetworkManager) getChatbotById(id int) common.ChatBot {
 // Restart a chatbot
 func (nm *NetworkManager) restart(botId int) {
 
-	glog.Infoln("Restarting bot ", botId)
+	log.Log.Infoln("Restarting bot ", botId)
 
 	var config *common.BotConfig
 
@@ -147,7 +138,7 @@ func (nm *NetworkManager) restart(botId int) {
 	}
 
 	if config == nil {
-		glog.Infoln("Could not find configuration for bot ", botId, ". Bot will not run.")
+		log.Log.Infoln("Could not find configuration for bot ", botId, ". Bot will not run.")
 		delete(nm.chatbots, botId)
 		return
 	}
