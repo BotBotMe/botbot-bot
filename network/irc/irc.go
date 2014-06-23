@@ -30,7 +30,8 @@ import (
 
 const (
 	// VERSION of the botbot-bot
-	VERSION           = "botbot v0.3.0"
+	VERSION = "botbot v0.3.0"
+	// IRC command code from the spec
 	RPL_WHOISCHANNELS = "319"
 )
 
@@ -52,6 +53,7 @@ func (s chatBotStats) GetOrCreate(identifier string) (*expvar.Map, bool) {
 }
 
 var (
+	// BotStats hold the reference to the expvar.Map for each ircBot instance
 	BotStats = chatBotStats{m: make(map[string]*expvar.Map)}
 )
 
@@ -149,7 +151,7 @@ func (bot *ircBot) monitor() {
 	maxPingWithoutResponse := 3
 	maxPongWithoutMessage := 150
 	pongCounter := 0
-	missed_ping := 0
+	missedPing := 0
 	for {
 		select {
 		case <-bot.closing:
@@ -182,10 +184,10 @@ func (bot *ircBot) monitor() {
 		case <-pingTimeout:
 			// Deactivate the pingTimeout case
 			pingTimeout = nil
-			botStats.Add("missed_ping", 1)
-			missed_ping++
-			glog.Infoln("[Info] No pong from ircBot server", bot, "missed", missed_ping)
-			if missed_ping > maxPingWithoutResponse {
+			botStats.Add("missedPing", 1)
+			missedPing++
+			glog.Infoln("[Info] No pong from ircBot server", bot, "missed", missedPing)
+			if missedPing > maxPingWithoutResponse {
 				close(reconnect)
 			}
 		}
@@ -253,7 +255,7 @@ func (bot *ircBot) Init() {
 func (bot *ircBot) Connect() {
 
 	if bot.socket != nil {
-		// socket already set, unit tests need this
+		glog.Infoln("[Info] bot.socket already set, do not attempt to Connect")
 		return
 	}
 
@@ -496,6 +498,11 @@ func (bot *ircBot) sender() {
 		case <-time.After(bot.rateLimit):
 			select {
 			case data := <-bot.sendQueue:
+				if bot.socket == nil {
+					// socket does not exist
+					glog.Infoln("[Info] the socket does not exist, exit listen goroutine")
+					return
+				}
 
 				if glog.V(1) {
 					glog.Infoln("[RAW", bot, "] -->", string(data))
@@ -546,11 +553,11 @@ func (bot *ircBot) readSocket(input chan string) {
 	}
 }
 
-
 // Listen for incoming messages. Parse them and put on channel.
 // Should run in go-routine
 func (bot *ircBot) listen() {
 	input := make(chan string)
+	botStats := bot.GetStats()
 
 	go bot.readSocket(input)
 
@@ -558,10 +565,9 @@ func (bot *ircBot) listen() {
 		select {
 		case <-bot.closing:
 			return
-		case content := <- input:
+		case content := <-input:
 			theLine, err := parseLine(content)
 			if err == nil {
-				botStats := bot.GetStats()
 				botStats.Add("received_messages", 1)
 				theLine.ChatBotId = bot.id
 				bot.act(theLine)
@@ -574,6 +580,8 @@ func (bot *ircBot) listen() {
 }
 
 func (bot *ircBot) act(theLine *line.Line) {
+	bot.Lock()
+	defer bot.Unlock()
 	// Notify the monitor goroutine that we receive a PONG
 	if theLine.Command == "PONG" {
 		if glog.V(2) {
@@ -859,9 +867,8 @@ func isEqual(a, b []*common.Channel) (flag bool) {
 			}
 		}
 		return true
-	} else {
-		return false
 	}
+	return false
 }
 
 // Is a in b? container must be sorted
