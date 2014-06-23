@@ -161,6 +161,7 @@ func (bot *ircBot) monitor() {
 			bot.reconnect()
 		case <-bot.monitorChan:
 			pongCounter = 0
+			missedPing = 0
 			// Deactivate the pingTimeout case
 			pingTimeout = nil
 			if glog.V(2) {
@@ -184,7 +185,7 @@ func (bot *ircBot) monitor() {
 		case <-pingTimeout:
 			// Deactivate the pingTimeout case
 			pingTimeout = nil
-			botStats.Add("missedPing", 1)
+			botStats.Add("missed_ping", 1)
 			missedPing++
 			glog.Infoln("[Info] No pong from ircBot server", bot, "missed", missedPing)
 			if missedPing > maxPingWithoutResponse {
