@@ -197,7 +197,7 @@ func (bot *ircBot) whoisCollector() {
 		select {
 		case <-bot.closing:
 			return
-		case <-time.After(time.Minute * 1):
+		case <-time.After(time.Minute * 5):
 			bot.Whois()
 		}
 	}
@@ -514,46 +514,51 @@ func (bot *ircBot) sender() {
 	}
 }
 
+// Read from the socket
+func (bot *ircBot) readSocket(input chan string) {
+
+	bufRead := bufio.NewReader(bot.socket)
+	for {
+		contentData, err := bufRead.ReadBytes('\n')
+
+		if err != nil {
+			netErr, ok := err.(net.Error)
+			if ok && netErr.Timeout() == true {
+				continue
+			} else {
+				glog.Errorln("Lost IRC server connection. ", err)
+				bot.reconnect()
+				return
+			}
+		}
+
+		if len(contentData) == 0 {
+			continue
+		}
+
+		content := toUnicode(contentData)
+
+		if glog.V(2) {
+			glog.Infoln("[RAW", bot.String(), "]"+content)
+		}
+
+		input <- content
+	}
+}
+
+
 // Listen for incoming messages. Parse them and put on channel.
 // Should run in go-routine
 func (bot *ircBot) listen() {
+	input := make(chan string)
 
-	var contentData []byte
-	var content string
-	var err error
+	go bot.readSocket(input)
 
-	bufRead := bufio.NewReader(bot.socket)
 	for {
 		select {
 		case <-bot.closing:
 			return
-		default:
-			contentData, err = bufRead.ReadBytes('\n')
-
-			if err != nil {
-				netErr, ok := err.(net.Error)
-				if ok && netErr.Timeout() == true {
-					continue
-				} else {
-					glog.Errorln("Lost IRC server connection. ", err)
-					err := bot.Close()
-					if err != nil {
-						glog.Infoln("[Error] An error occured while Closing the bot", bot, ": ", err)
-					}
-					return
-				}
-			}
-
-			if len(contentData) == 0 {
-				continue
-			}
-
-			content = toUnicode(contentData)
-
-			if glog.V(2) {
-				glog.Infoln("[RAW", bot.String(), "]"+content)
-			}
-
+		case content := <- input:
 			theLine, err := parseLine(content)
 			if err == nil {
 				botStats := bot.GetStats()
@@ -646,16 +651,25 @@ func (bot *ircBot) Close() error {
 	case <-bot.closing:
 		glog.Infoln("[Info] already bot.closing is already closed closed")
 	default:
+		glog.Infoln("[Info] Closing bot.")
 		close(bot.closing)
 	}
 
 	bot.sendShutdown()
-	return bot.socket.Close()
+
+	glog.Infoln("[Info] Closing bot socket.")
+	var err error
+	if bot.socket != nil {
+		err = bot.socket.Close()
+		bot.socket = nil
+	}
+	return err
 }
 
 // Send a non-standard SHUTDOWN message to the plugins
 // This allows them to know that this channel is offline
 func (bot *ircBot) sendShutdown() {
+	glog.Infoln("[Info] Sending Shutdown command")
 	bot.Lock()
 	defer bot.Unlock()
 	shutLine := &line.Line{
