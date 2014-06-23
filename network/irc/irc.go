@@ -31,7 +31,7 @@ import (
 const (
 	// VERSION of the botbot-bot
 	VERSION = "botbot v0.3.0"
-	// IRC command code from the spec
+	// RPL_WHOISCHANNELS IRC command code from the spec
 	RPL_WHOISCHANNELS = "319"
 )
 
@@ -264,8 +264,8 @@ func (bot *ircBot) Connect() {
 	// }
 
 	var (
-		socket net.Conn
-		err error
+		socket  net.Conn
+		err     error
 		counter int
 	)
 
