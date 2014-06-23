@@ -2,17 +2,15 @@ package main
 
 import (
 	_ "expvar"
-	"flag"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/BotBotMe/botbot-bot/common"
-	"github.com/golang/glog"
 	_ "net/http/pprof"
 
+	"github.com/BotBotMe/botbot-bot/common"
+	"github.com/BotBotMe/botbot-bot/log"
 )
 
 const (
@@ -21,8 +19,7 @@ const (
 )
 
 func main() {
-	flag.Parse()
-	glog.Infoln("START. Use 'botbot -help' for command line options.")
+	log.Log.Infoln("START. Use 'botbot -help' for command line options.")
 
 	storage := common.NewPostgresStorage()
 	defer storage.Close()
@@ -38,7 +35,7 @@ func main() {
 	go botbot.mainLoop()
 
 	// Start and http server to serve the stats from expvar
-	log.Fatal(http.ListenAndServe(":3030", nil))
+	log.Log.Fatal(http.ListenAndServe(":3030", nil))
 
 	// Trap stop signal (Ctrl-C, kill) to exit
 	kill := make(chan os.Signal)
@@ -47,10 +44,10 @@ func main() {
 	// Wait for stop signal
 	for {
 		<-kill
-		glog.Infoln("Graceful shutdown")
+		log.Log.Infoln("Graceful shutdown")
 		botbot.shutdown()
 		break
 	}
 
-	glog.Infoln("Bye")
+	log.Log.Infoln("Bye")
 }
