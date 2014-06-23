@@ -10,7 +10,7 @@ type ChatBot interface {
 	io.Closer
 	Send(channel, msg string)
 	Update(config *BotConfig)
-	IsRunning() bool
+	//IsRunning() bool
 	GetUser() string
 }
 

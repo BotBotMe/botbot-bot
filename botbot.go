@@ -35,7 +35,8 @@ func NewBotBot(storage common.Storage, queue common.Queue) *BotBot {
 
 	netMan := network.NewNetworkManager(storage, fromServer)
 	netMan.RefreshChatbots()
-	go netMan.MonitorChatbots()
+	// TODO (yml) We might be able to get rid of this goroutine
+	//go netMan.MonitorChatbots()
 
 	dis := dispatch.NewDispatcher(queue)
 

@@ -3,7 +3,6 @@ package network
 import (
 	"sort"
 	"sync"
-	"time"
 
 	"github.com/golang/glog"
 
@@ -109,18 +108,19 @@ func (nm *NetworkManager) Send(chatbotId int, channel, msg string) {
 	nm.RUnlock()
 }
 
-// Check out chatbots are alive, recreating them if not. Run this in go-routine.
-func (nm *NetworkManager) MonitorChatbots() {
-
-	for nm.IsRunning() {
-		for id, bot := range nm.chatbots {
-			if !bot.IsRunning() {
-				nm.restart(id)
-			}
-		}
-		time.Sleep(1 * time.Second)
-	}
-}
+// TODO(yml) find out if this is needed since we deal with it at the IRC level
+// // Check out chatbots are alive, recreating them if not. Run this in go-routine.
+// func (nm *NetworkManager) MonitorChatbots() {
+//
+// 	for nm.IsRunning() {
+// 		for id, bot := range nm.chatbots {
+// 			if !bot.IsRunning() {
+// 				nm.restart(id)
+// 			}
+// 		}
+// 		time.Sleep(1 * time.Second)
+// 	}
+// }
 
 // get a chatbot by id
 func (nm *NetworkManager) getChatbotById(id int) common.ChatBot {
