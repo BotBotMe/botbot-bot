@@ -77,6 +77,7 @@ type ircBot struct {
 	pingResponse     chan struct{}
 	reconnectChan    chan struct{}
 	closing          chan struct{}
+	receive          chan string
 }
 
 // NewBot create an irc instance of ChatBot
@@ -104,6 +105,7 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
 		reconnectChan:    make(chan struct{}),
 		closing:          make(chan struct{}),
+		receive:          make(chan string),
 	}
 
 	chatbotStats, ok := BotStats.GetOrCreate(chatbot.serverIdentifier)
@@ -257,52 +259,49 @@ func (bot *ircBot) Init() {
 // to Dial to the server.
 func (bot *ircBot) Connect() {
 
-	// TODO (yml) remove eventually
-	// if bot.socket != nil {
-	// 	glog.Infoln("[Info] bot.socket already set, do not attempt to Connect")
-	// 	return
-	// }
-
 	var (
 		err     error
 		counter int
 	)
 
+	connected := make(chan struct{})
 	connectTimeout := time.After(0)
 
 	for {
 		select {
 		case <-bot.closing:
 			return
+		case <-connected:
+			go bot.readSocket()
+			return
 		case <-connectTimeout:
 			counter++
+			connectTimeout = nil
 			glog.Infoln("Connecting to IRC server: ", bot.address)
 
 			bot.socket, err = tls.Dial("tcp", bot.address, nil) // Always try TLS first
 			if err == nil {
 				glog.Infoln("Connected: TLS secure")
-				return
-			}
-
-			glog.Infoln("Could not connect using TLS because: ", err)
-
-			_, ok := err.(x509.HostnameError)
-			if ok {
+				close(connected)
+				continue
+			} else if _, ok := err.(x509.HostnameError); ok {
+				glog.Infoln("Could not connect using TLS because: ", err)
 				// Certificate might not match. This happens on irc.cloudfront.net
 				insecure := &tls.Config{InsecureSkipVerify: true}
 				bot.socket, err = tls.Dial("tcp", bot.address, insecure)
 
 				if err == nil && isCertValid(bot.socket.(*tls.Conn)) {
 					glog.Infoln("Connected: TLS with awkward certificate")
-					return
+					close(connected)
+					continue
 				}
 			}
 
 			bot.socket, err = net.Dial("tcp", bot.address)
-
 			if err == nil {
 				glog.Infoln("Connected: Plain text insecure")
-				return
+				close(connected)
+				continue
 			}
 			delay := 5 * counter
 			glog.Infoln("IRC Connect error. Will attempt to re-connect. ", err, "in", delay, "seconds")
@@ -534,7 +533,7 @@ func (bot *ircBot) sender() {
 }
 
 // Read from the socket
-func (bot *ircBot) readSocket(input chan string) {
+func (bot *ircBot) readSocket() {
 
 	bufRead := bufio.NewReader(bot.socket)
 	for {
@@ -561,23 +560,19 @@ func (bot *ircBot) readSocket(input chan string) {
 			glog.Infoln("[RAW", bot.String(), "]"+content)
 		}
 
-		input <- content
+		bot.receive <- content
 	}
 }
 
 // Listen for incoming messages. Parse them and put on channel.
 // Should run in go-routine
 func (bot *ircBot) listen() {
-	input := make(chan string)
 	botStats := bot.GetStats()
-
-	go bot.readSocket(input)
-
 	for {
 		select {
 		case <-bot.closing:
 			return
-		case content := <-input:
+		case content := <-bot.receive:
 			theLine, err := parseLine(content)
 			if err == nil {
 				botStats.Add("received_messages", 1)
