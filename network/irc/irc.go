@@ -264,7 +264,6 @@ func (bot *ircBot) Connect() {
 	// }
 
 	var (
-		socket  net.Conn
 		err     error
 		counter int
 	)
@@ -293,7 +292,7 @@ func (bot *ircBot) Connect() {
 				insecure := &tls.Config{InsecureSkipVerify: true}
 				bot.socket, err = tls.Dial("tcp", bot.address, insecure)
 
-				if err == nil && isCertValid(socket.(*tls.Conn)) {
+				if err == nil && isCertValid(bot.socket.(*tls.Conn)) {
 					glog.Infoln("Connected: TLS with awkward certificate")
 					return
 				}
@@ -306,7 +305,7 @@ func (bot *ircBot) Connect() {
 				return
 			}
 			delay := 5 * counter
-			glog.Infoln("IRC Connect error. Will attempt to re-connect. ", err, "in", delay, "seonds")
+			glog.Infoln("IRC Connect error. Will attempt to re-connect. ", err, "in", delay, "seconds")
 			connectTimeout = time.After(time.Duration(delay) * time.Second)
 		}
 	}
