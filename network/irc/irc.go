@@ -169,6 +169,8 @@ func (bot *ircBot) monitor() {
 			if glog.V(2) {
 				glog.Infoln("[Info] Message received from the server for", bot)
 			}
+		case <-time.After(time.Minute * 5):
+			bot.Whois()
 		case <-time.After(time.Second * 60):
 			glog.Infoln("[Info] Ping the ircBot server", pongCounter, bot)
 			botStats.Add("ping", 1)
@@ -193,17 +195,6 @@ func (bot *ircBot) monitor() {
 			if missedPing > maxPingWithoutResponse {
 				close(reconnect)
 			}
-		}
-	}
-}
-
-func (bot *ircBot) whoisCollector() {
-	for {
-		select {
-		case <-bot.closing:
-			return
-		case <-time.After(time.Minute * 5):
-			bot.Whois()
 		}
 	}
 }
@@ -238,9 +229,6 @@ func (bot *ircBot) Init() {
 
 	// Monitor that we are still getting incoming messages in a background thread
 	go bot.monitor()
-
-	// Poll the the bot server to know to which channels we are connected
-	go bot.whoisCollector()
 
 	// Listen for outgoing messages (rate limited) in background thread
 	if bot.sendQueue == nil {
@@ -499,8 +487,6 @@ func (bot *ircBot) sender() {
 	for {
 		select {
 		case <-bot.closing:
-			// TODO(yml): may be we should have a grace period to let the bot
-			// a chance to send the message in the buffer
 			return
 		case <-reconnect:
 			bot.reconnect()
@@ -526,7 +512,7 @@ func (bot *ircBot) sender() {
 				}
 				botStats.Add("messages", 1)
 			default:
-				// Do not block  waiting for message to send
+				continue
 			}
 		}
 	}
@@ -537,30 +523,32 @@ func (bot *ircBot) readSocket() {
 
 	bufRead := bufio.NewReader(bot.socket)
 	for {
-		contentData, err := bufRead.ReadBytes('\n')
-
-		if err != nil {
-			netErr, ok := err.(net.Error)
-			if ok && netErr.Timeout() == true {
-				continue
-			} else {
-				glog.Errorln("Lost IRC server connection. ", err)
-				bot.reconnect()
-				return
+		select {
+		case <-bot.closing:
+			return
+		default:
+			contentData, err := bufRead.ReadBytes('\n')
+			if err != nil {
+				netErr, ok := err.(net.Error)
+				if ok && netErr.Timeout() == true {
+					continue
+				} else {
+					glog.Errorln("Lost IRC server connection. ", err)
+					bot.reconnect()
+					return
+				}
 			}
+
+			if len(contentData) == 0 {
+				continue
+			}
+
+			content := toUnicode(contentData)
+			if glog.V(2) {
+				glog.Infoln("[RAW", bot.String(), "]"+content)
+			}
+			bot.receive <- content
 		}
-
-		if len(contentData) == 0 {
-			continue
-		}
-
-		content := toUnicode(contentData)
-
-		if glog.V(2) {
-			glog.Infoln("[RAW", bot.String(), "]"+content)
-		}
-
-		bot.receive <- content
 	}
 }
 
