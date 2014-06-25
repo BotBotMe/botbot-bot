@@ -162,6 +162,7 @@ func (bot *ircBot) monitor() {
 		case <-reconnect:
 			glog.Infoln("IRC monitoring KO", bot)
 			bot.reconnect()
+			return
 		case <-bot.monitorChan:
 			pongCounter = 0
 			missedPing = 0
