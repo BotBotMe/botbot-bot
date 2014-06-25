@@ -7,4 +7,4 @@ go:
 install:
   - go get github.com/BotBotMe/botbot-bot
 
-script: go test github.com/BotBotMe/botbot-bot
+script: go test github.com/BotBotMe/botbot-bot/...
