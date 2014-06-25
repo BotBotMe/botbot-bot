@@ -267,7 +267,13 @@ func (bot *ircBot) Connect() {
 		case <-connectTimeout:
 			counter++
 			connectTimeout = nil
-			glog.Infoln("Connecting to IRC server: ", bot.address)
+			glog.Infoln("[Info] Connecting to IRC server: ", bot.address)
+			if _, ok := bot.socket.(common.MockSocket); ok {
+				// The test suite take advantage of this special case by crafting a bot that provides its own mocksocket implementation.
+				glog.Infoln("[Info] This message should only ever be seen while running the test suite")
+				close(connected)
+				continue
+			}
 
 			bot.socket, err = tls.Dial("tcp", bot.address, nil) // Always try TLS first
 			if err == nil {

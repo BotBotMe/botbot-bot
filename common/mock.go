@@ -5,7 +5,42 @@ import (
 	"net"
 	"sync"
 	"testing"
+	"time"
 )
+
+// MockSocket is a dummy implementation of ReadWriteCloser
+type MockSocket struct {
+	sync.RWMutex
+	Received []string
+	Counter  chan bool
+}
+
+func (sock MockSocket) Write(data []byte) (int, error) {
+	sock.Lock()
+	defer sock.Unlock()
+	sock.Received = append(sock.Received, string(data))
+	if sock.Counter != nil {
+		sock.Counter <- true
+	}
+	return len(data), nil
+}
+
+func (sock MockSocket) Read(into []byte) (int, error) {
+	sock.RLock()
+	defer sock.RUnlock()
+	time.Sleep(time.Second) // Prevent busy loop
+	return 0, nil
+}
+
+func (sock MockSocket) Close() error {
+	return nil
+}
+
+func (sock *MockSocket) ReceivedLength() int {
+	sock.RLock()
+	defer sock.RUnlock()
+	return len(sock.Received)
+}
 
 /*
  * Mock IRC server
