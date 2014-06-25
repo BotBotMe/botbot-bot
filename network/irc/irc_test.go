@@ -9,6 +9,7 @@ import (
 
 	"github.com/BotBotMe/botbot-bot/common"
 	"github.com/BotBotMe/botbot-bot/line"
+	"github.com/golang/glog"
 )
 
 var (
@@ -185,6 +186,7 @@ func TestFlood(t *testing.T) {
 		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
 		closing:          make(chan struct{}),
 		receive:          make(chan string),
+		sendQueue:        make(chan []byte, 256),
 	}
 	chatbot.Init()
 
@@ -196,14 +198,13 @@ func TestFlood(t *testing.T) {
 	}
 
 	// Wait for them to 'arrive' at the socket
-	for numGot := 0; numGot < NUM; numGot++ {
+	for numGot := 0; numGot <= NUM; numGot++ {
 		<-receivedCounter
 	}
 
 	elapsed := int64(time.Since(startTime))
 
-	// NUM messages should take at least ((NUM-1) / 4) seconds (max 4 msgs second)
-	expected := int64((NUM-1)/4) * int64(time.Second)
+	expected := int64((NUM-1)/4) * int64(chatbot.rateLimit)
 	if elapsed < expected {
 		t.Error("Flood prevention did not work")
 	}
@@ -213,9 +214,11 @@ func TestFlood(t *testing.T) {
 // Test joining additional channels
 func TestUpdate(t *testing.T) {
 	setGlogFlags()
+	glog.Infoln("[DEBUG] starting TestUpdate")
 
 	fromServer := make(chan *line.Line)
-	mockSocket := common.MockSocket{Counter: nil}
+	receiver := make(chan string, 10)
+	mockSocket := common.MockSocket{Receiver: receiver}
 	channels := make([]*common.Channel, 0, 2)
 	channel := common.Channel{Name: "#test", Fingerprint: "uuid-string"}
 	channels = append(channels, &channel)
@@ -230,42 +233,33 @@ func TestUpdate(t *testing.T) {
 		fromServer:       fromServer,
 		channels:         channels,
 		socket:           mockSocket,
-		sendQueue:        make(chan []byte, 100),
+		rateLimit:        time.Second,
+		monitorChan:      make(chan struct{}),
+		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
+		closing:          make(chan struct{}),
+		receive:          make(chan string),
+		sendQueue:        make(chan []byte, 256),
 	}
-	// Rate limiting requires a go-routine to actually do the sending
-	go chatbot.sender()
-
+	chatbot.Init()
 	conf := map[string]string{
 		"nick": "test", "password": "testxyz", "server": "localhost"}
 	channels = append(channels, &NEW_CHANNEL)
 	newConfig := &common.BotConfig{Id: 1, Config: conf, Channels: channels}
 
+	// TODO (yml) there is probably better than sleeping but we need to wait
+	// until chatbot is fully ready
+	time.Sleep(time.Second * 2)
 	chatbot.Update(newConfig)
-
-	// Wait a bit
-	for i := 0; i < 10; i++ {
-		time.Sleep(time.Second / 3)
-		if mockSocket.ReceivedLength() >= 1 {
-			break
-		}
-	}
-
-	// Expect a JOIN of NEW_CHANNEL but NOT a JOIN on #test (because already in there)
 	isFound := false
-	for _, cmd := range mockSocket.Received {
-
-		cmd = strings.TrimSpace(cmd)
-
-		if cmd == "JOIN "+NEW_CHANNEL.Credential() {
+	for received := range mockSocket.Receiver {
+		glog.Infoln("[DEBUG] received", received)
+		if strings.TrimSpace(received) == "JOIN "+NEW_CHANNEL.Credential() {
 			isFound = true
-			break
-		}
-
-		if cmd == "JOIN #test" {
+			close(mockSocket.Receiver)
+		} else if received == "JOIN #test" {
 			t.Error("Should not rejoin channels already in, can cause flood")
 		}
 	}
-
 	if !isFound {
 		t.Error("Expected JOIN " + NEW_CHANNEL.Credential())
 	}

@@ -357,9 +357,11 @@ func (bot *ircBot) Update(config *common.BotConfig) {
 
 	isNewServer := bot.updateServer(config)
 	if isNewServer {
+		glog.Infoln("[Info] the config is from a new server.")
 		// If the server changed, we've already done nick and channel changes too
 		return
 	}
+	glog.Infoln("[Info] bot.Update -- It is not a new server.")
 
 	bot.updateNick(config.Config["nick"], config.Config["password"])
 	bot.updateChannels(config.Channels)
@@ -373,7 +375,7 @@ func (bot *ircBot) updateServer(config *common.BotConfig) bool {
 		return false
 	}
 
-	glog.Infoln("Changing IRC server from ", bot.address, " to ", addr)
+	glog.Infoln("[Info] Changing IRC server from ", bot.address, " to ", addr)
 
 	err := bot.Close()
 	if err != nil {
@@ -394,9 +396,14 @@ func (bot *ircBot) updateServer(config *common.BotConfig) bool {
 
 // Update the nickname we're registered under, if needed
 func (bot *ircBot) updateNick(newNick, newPass string) {
+	bot.Lock()
+	defer bot.Unlock()
+	glog.Infoln("[Info] Starting bot.updateNick()")
 	if newNick == bot.nick {
+		glog.Infoln("[Info] bot.updateNick() -- the nick has not changed so return")
 		return
 	}
+	glog.Infoln("[Info] bot.updateNick() -- set the new nick")
 
 	bot.nick = newNick
 	bot.password = newPass
@@ -405,16 +412,23 @@ func (bot *ircBot) updateNick(newNick, newPass string) {
 
 // Update the channels based on new configuration, leaving old ones and joining new ones
 func (bot *ircBot) updateChannels(newChannels []*common.Channel) {
+	glog.Infoln("[Info] Starting bot.updateChannels")
+	glog.Infoln("[Debug] newChannels: ", newChannels)
+	glog.Infoln("[Debug] bot.channels: ", bot.channels)
+	bot.RLock()
+
 	if isEqual(newChannels, bot.channels) {
 		if glog.V(2) {
 			glog.Infoln("Channels comparison is equals for bot: ", bot.nick)
 		}
 		return
 	}
+	glog.Infoln("[Info] The channels the bot is connected need to be updated")
 
 	// PART old ones
 	for _, channel := range bot.channels {
 		if !isIn(channel, newChannels) {
+			glog.Infoln("[Info] Parting new channel: ", channel.Credential())
 			bot.part(channel.Credential())
 		}
 	}
@@ -422,11 +436,20 @@ func (bot *ircBot) updateChannels(newChannels []*common.Channel) {
 	// JOIN new ones
 	for _, channel := range newChannels {
 		if !isIn(channel, bot.channels) {
+			glog.Infoln("[Info] Joining new channel: ", channel.Credential())
 			bot.join(channel.Credential())
+			glog.Infoln("[DEBUG] After join")
 		}
 	}
-
+	bot.RUnlock()
+	glog.Infoln("[Debug] before Lock")
+	bot.Lock()
+	glog.Infoln("[Debug] after Lock")
 	bot.channels = newChannels
+	glog.Infoln("[Debug] before Unlock")
+	bot.Unlock()
+	glog.Infoln("[Debug] after Unlock")
+
 }
 
 // Join channels
@@ -444,8 +467,7 @@ func (bot *ircBot) Whois() {
 // Join an IRC channel
 func (bot *ircBot) join(channel string) {
 	bot.SendRaw("JOIN " + channel)
-	botStats := bot.GetStats()
-	botStats.Add("channels", 1)
+	glog.Infoln("[Debug] Exiting bot.join")
 }
 
 // Leave an IRC channel
@@ -464,6 +486,7 @@ func (bot *ircBot) Send(channel, msg string) {
 // Send message down socket. Add \n at end first.
 func (bot *ircBot) SendRaw(msg string) {
 	bot.sendQueue <- []byte(msg + "\n")
+	glog.Infoln("[Debug] Exiting bot.SendRaw")
 }
 
 // Tell the irc server who we are - we can't do anything until this is done.
@@ -493,7 +516,7 @@ func (bot *ircBot) sender() {
 	var err error
 	reconnect := make(chan struct{})
 	botStats := bot.GetStats()
-
+	glog.Infoln("[Debug] Starting the sender")
 	for {
 		select {
 		case <-bot.closing:
@@ -505,6 +528,7 @@ func (bot *ircBot) sender() {
 		case <-time.After(bot.rateLimit):
 			select {
 			case data := <-bot.sendQueue:
+				glog.Infoln("[Debug] Pulled data from bot.sendQueue chan:", string(data))
 				if bot.socket == nil {
 					// socket does not exist
 					glog.Infoln("[Info] the socket does not exist, exit listen goroutine")
@@ -514,7 +538,7 @@ func (bot *ircBot) sender() {
 				if glog.V(1) {
 					glog.Infoln("[RAW", bot, "] -->", string(data))
 				}
-
+				glog.Infoln("[Debug] Going to write to bot.socket")
 				_, err = bot.socket.Write(data)
 				if err != nil {
 					glog.Errorln("[Error] Error writing to socket to", bot, ": ", err)

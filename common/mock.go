@@ -6,22 +6,26 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/golang/glog"
 )
 
 // MockSocket is a dummy implementation of ReadWriteCloser
 type MockSocket struct {
 	sync.RWMutex
-	Received []string
 	Counter  chan bool
+	Receiver chan string
 }
 
 func (sock MockSocket) Write(data []byte) (int, error) {
-	sock.Lock()
-	defer sock.Unlock()
-	sock.Received = append(sock.Received, string(data))
+	glog.Infoln("[Debug]: Starting MockSocket.Write of:", string(data))
 	if sock.Counter != nil {
 		sock.Counter <- true
 	}
+	if sock.Receiver != nil {
+		sock.Receiver <- string(data)
+	}
+
 	return len(data), nil
 }
 
@@ -33,13 +37,13 @@ func (sock MockSocket) Read(into []byte) (int, error) {
 }
 
 func (sock MockSocket) Close() error {
+	if sock.Receiver != nil {
+		close(sock.Receiver)
+	}
+	if sock.Counter != nil {
+		close(sock.Counter)
+	}
 	return nil
-}
-
-func (sock *MockSocket) ReceivedLength() int {
-	sock.RLock()
-	defer sock.RUnlock()
-	return len(sock.Received)
 }
 
 /*
