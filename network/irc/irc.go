@@ -129,6 +129,8 @@ func (bot *ircBot) GetUser() string {
 }
 
 func (bot *ircBot) GetStats() *expvar.Map {
+	bot.Lock()
+	defer bot.Unlock()
 	stats, _ := BotStats.GetOrCreate(bot.serverIdentifier)
 	return stats
 }
