@@ -75,7 +75,6 @@ type ircBot struct {
 	fromServer       chan *line.Line
 	monitorChan      chan struct{}
 	pingResponse     chan struct{}
-	reconnectChan    chan struct{}
 	closing          chan struct{}
 	receive          chan string
 }
@@ -103,7 +102,6 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 		channels:         config.Channels,
 		monitorChan:      make(chan struct{}),
 		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
-		reconnectChan:    make(chan struct{}),
 		closing:          make(chan struct{}),
 		receive:          make(chan string),
 	}
@@ -136,6 +134,9 @@ func (bot *ircBot) GetStats() *expvar.Map {
 }
 
 func (bot *ircBot) String() string {
+	// TODO understand why the Lock prevent the bot form joining
+	//bot.RLock()
+	//defer bot.RUnlock()
 	return fmt.Sprintf("%s on %s", bot.nick, bot.address)
 }
 
@@ -533,8 +534,7 @@ func (bot *ircBot) readSocket() {
 				if ok && netErr.Timeout() == true {
 					continue
 				} else {
-					glog.Errorln("Lost IRC server connection. ", err)
-					bot.reconnect()
+					glog.Errorln("[Info] An Error occured while reading from bot.socket ", err)
 					return
 				}
 			}
@@ -647,34 +647,38 @@ func (bot *ircBot) act(theLine *line.Line) {
 	bot.fromServer <- theLine
 }
 
-// Close ircBot
-func (bot *ircBot) Close() error {
+// Close ircBot and bot.socket
+func (bot *ircBot) Close() (err error) {
 	// Send a signal to all goroutine to return
-	select {
-	case <-bot.closing:
-		glog.Infoln("[Info] already bot.closing is already closed closed")
-	default:
-		glog.Infoln("[Info] Closing bot.")
-		close(bot.closing)
+	for {
+		select {
+		case <-bot.closing:
+			glog.Infoln("[Info] bot.closing is already closed")
+			return err
+		default:
+			glog.Infoln("[Info] Closing bot.")
+			bot.sendShutdown()
+			close(bot.closing)
+			if bot.socket != nil {
+				glog.Infoln("[Info] Closing bot.socket.")
+				err = bot.socket.Close()
+				if err != nil {
+					glog.Infoln("[Error] An error occured while Closing  bot.socket", bot, ": ", err)
+				}
+				bot.Lock()
+				bot.socket = nil
+				bot.Unlock()
+			}
+		}
 	}
-
-	bot.sendShutdown()
-
-	var err error
-	if bot.socket != nil {
-		glog.Infoln("[Info] Closing bot socket.")
-		err = bot.socket.Close()
-		bot.socket = nil
-	}
-	return err
 }
 
 // Send a non-standard SHUTDOWN message to the plugins
 // This allows them to know that this channel is offline
 func (bot *ircBot) sendShutdown() {
-	glog.Infoln("[Info] Sending Shutdown command")
-	bot.Lock()
-	defer bot.Unlock()
+	bot.RLock()
+	defer bot.RUnlock()
+	glog.Infoln("[Info] Logging Shutdown command in the channels monitored by:", bot)
 	shutLine := &line.Line{
 		Command:   "SHUTDOWN",
 		Received:  time.Now().UTC().Format(time.RFC3339Nano),
