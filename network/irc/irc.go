@@ -75,7 +75,6 @@ type ircBot struct {
 	fromServer       chan *line.Line
 	monitorChan      chan struct{}
 	pingResponse     chan struct{}
-	closing          chan struct{}
 	receive          chan string
 }
 
@@ -102,7 +101,6 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 		channels:         config.Channels,
 		monitorChan:      make(chan struct{}),
 		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
-		closing:          make(chan struct{}),
 		receive:          make(chan string),
 	}
 
@@ -147,7 +145,7 @@ func (bot *ircBot) String() string {
 // If ircBot does not ly maxPingWithoutResponse times try to reconnect
 // If ircBot does  replymaxPongWithoutMessage but we are still not getting
 //   is probably something wrong try to reconnect.
-func (bot *ircBot) monitor() {
+func (bot *ircBot) monitor(quit chan struct{}) {
 	var pingTimeout <-chan time.Time
 	reconnect := make(chan struct{})
 	botStats := bot.GetStats()
@@ -158,11 +156,11 @@ func (bot *ircBot) monitor() {
 	missedPing := 0
 	for {
 		select {
-		case <-bot.closing:
+		case <-quit:
 			return
 		case <-reconnect:
 			glog.Infoln("IRC monitoring KO", bot)
-			bot.reconnect()
+			bot.reconnect(quit)
 			return
 		case <-bot.monitorChan:
 			pongCounter = 0
@@ -202,14 +200,20 @@ func (bot *ircBot) monitor() {
 }
 
 // reconnect the ircBot
-func (bot *ircBot) reconnect() {
+func (bot *ircBot) reconnect(quit chan struct{}) {
 	glog.Infoln("Trying to reconnect", bot)
 	botStats := bot.GetStats()
 	botStats.Add("restart", 1)
-	err := bot.Close()
-	if err != nil {
-		glog.Errorln("An error occured while Closing the bot", bot, ": ", err)
+	select {
+	case <-quit:
+		glog.Infoln("[Info] chan quit is already closed")
+	default:
+		err := bot.Close()
+		if err != nil {
+			glog.Errorln("An error occured while Closing the bot", bot, ": ", err)
+		}
 	}
+
 	time.Sleep(1 * time.Second) // Wait for timeout to be sure listen has stopped
 	bot.Init()
 }
@@ -219,18 +223,18 @@ func (bot *ircBot) Init() {
 
 	glog.Infoln("Init bot", bot)
 	bot.Lock()
-	bot.closing = make(chan struct{})
+	quit := make(chan struct{})
 	bot.isConnecting = true
 	bot.isAuthenticating = false
 	bot.Unlock()
 
-	bot.Connect()
+	bot.Connect(quit)
 
 	// Listen for incoming messages in background thread
-	go bot.listen()
+	go bot.listen(quit)
 
 	// Monitor that we are still getting incoming messages in a background thread
-	go bot.monitor()
+	go bot.monitor(quit)
 
 	// Listen for outgoing messages (rate limited) in background thread
 	bot.Lock()
@@ -238,7 +242,7 @@ func (bot *ircBot) Init() {
 		bot.sendQueue = make(chan []byte, 256)
 	}
 	bot.Unlock()
-	go bot.sender()
+	go bot.sender(quit)
 
 	bot.Lock()
 	if bot.serverPass != "" {
@@ -251,7 +255,7 @@ func (bot *ircBot) Init() {
 
 // Connect to the server. Here we keep trying every 10 seconds until we manage
 // to Dial to the server.
-func (bot *ircBot) Connect() {
+func (bot *ircBot) Connect(quit chan struct{}) {
 
 	var (
 		err     error
@@ -263,10 +267,10 @@ func (bot *ircBot) Connect() {
 
 	for {
 		select {
-		case <-bot.closing:
+		case <-quit:
 			return
 		case <-connected:
-			go bot.readSocket()
+			go bot.readSocket(quit)
 			return
 		case <-connectTimeout:
 			counter++
@@ -506,17 +510,17 @@ func (bot *ircBot) sendPassword() {
 
 // Actually really send message to the server. Implements rate limiting.
 // Should run in go-routine.
-func (bot *ircBot) sender() {
+func (bot *ircBot) sender(quit chan struct{}) {
 	glog.V(2).Infoln("Starting the sender for", bot)
 	var err error
 	reconnect := make(chan struct{})
 	botStats := bot.GetStats()
 	for {
 		select {
-		case <-bot.closing:
+		case <-quit:
 			return
 		case <-reconnect:
-			bot.reconnect()
+			bot.reconnect(quit)
 		// Rate limit to one message every tempo
 		// // https://github.com/BotBotMe/botbot-bot/issues/2
 		case <-time.After(bot.rateLimit):
@@ -551,12 +555,12 @@ func (bot *ircBot) sender() {
 }
 
 // Read from the socket
-func (bot *ircBot) readSocket() {
+func (bot *ircBot) readSocket(quit chan struct{}) {
 
 	bufRead := bufio.NewReader(bot.socket)
 	for {
 		select {
-		case <-bot.closing:
+		case <-quit:
 			return
 		default:
 			contentData, err := bufRead.ReadBytes('\n')
@@ -585,11 +589,11 @@ func (bot *ircBot) readSocket() {
 
 // Listen for incoming messages. Parse them and put on channel.
 // Should run in go-routine
-func (bot *ircBot) listen() {
+func (bot *ircBot) listen(quit chan struct{}) {
 	botStats := bot.GetStats()
 	for {
 		select {
-		case <-bot.closing:
+		case <-quit:
 			return
 		case content := <-bot.receive:
 			theLine, err := parseLine(content)
@@ -690,27 +694,19 @@ func (bot *ircBot) act(theLine *line.Line) {
 // Close ircBot and bot.socket
 func (bot *ircBot) Close() (err error) {
 	// Send a signal to all goroutine to return
-	for {
-		select {
-		case <-bot.closing:
-			glog.Infoln("[Info] bot.closing is already closed")
-			return err
-		default:
-			glog.Infoln("[Info] Closing bot.")
-			bot.sendShutdown()
-			close(bot.closing)
-			if bot.socket != nil {
-				glog.Infoln("[Info] Closing bot.socket.")
-				err = bot.socket.Close()
-				if err != nil {
-					glog.Errorln("An error occured while Closing  bot.socket", bot, ": ", err)
-				}
-				bot.Lock()
-				bot.socket = nil
-				bot.Unlock()
-			}
+	glog.Infoln("[Info] Closing bot.")
+	bot.sendShutdown()
+	if bot.socket != nil {
+		glog.Infoln("[Info] Closing bot.socket.")
+		err = bot.socket.Close()
+		if err != nil {
+			glog.Errorln("An error occured while Closing  bot.socket", bot, ": ", err)
 		}
+		bot.Lock()
+		bot.socket = nil
+		bot.Unlock()
 	}
+	return err
 }
 
 // Send a non-standard SHUTDOWN message to the plugins

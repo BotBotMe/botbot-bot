@@ -184,7 +184,6 @@ func TestFlood(t *testing.T) {
 		socket:           mockSocket,
 		monitorChan:      make(chan struct{}),
 		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
-		closing:          make(chan struct{}),
 		receive:          make(chan string),
 		sendQueue:        make(chan []byte, 256),
 	}
@@ -236,7 +235,6 @@ func TestUpdate(t *testing.T) {
 		rateLimit:        time.Second,
 		monitorChan:      make(chan struct{}),
 		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
-		closing:          make(chan struct{}),
 		receive:          make(chan string),
 		sendQueue:        make(chan []byte, 256),
 	}
