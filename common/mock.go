@@ -85,7 +85,9 @@ func (srv *MockIRCServer) Run(t *testing.T) {
 		// This can happen if a client trys to connect with tls
 		// Got will store the handshake data. The cient will try
 		// connect with a plaintext connect after the tls fails.
+		srv.Lock()
 		srv.Got = make([]string, 0)
+		srv.Unlock()
 
 		if lerr != nil {
 			t.Error("Error on IRC server on Accept. ", err)
