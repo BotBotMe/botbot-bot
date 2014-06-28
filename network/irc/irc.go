@@ -170,9 +170,6 @@ func (bot *ircBot) monitor() {
 			missedPing = 0
 			// Deactivate the pingTimeout case
 			pingTimeout = nil
-			if glog.V(2) {
-				glog.Infoln("[Info] Message received from the server for", bot)
-			}
 		case <-time.After(time.Minute * 5):
 			bot.Whois()
 		case <-time.After(time.Second * 60):
@@ -212,7 +209,7 @@ func (bot *ircBot) reconnect() {
 	botStats.Add("restart", 1)
 	err := bot.Close()
 	if err != nil {
-		glog.Infoln("[Error] An error occured while Closing the bot", bot, ": ", err)
+		glog.Errorln("An error occured while Closing the bot", bot, ": ", err)
 	}
 	time.Sleep(1 * time.Second) // Wait for timeout to be sure listen has stopped
 	bot.Init()
@@ -341,13 +338,13 @@ func isIPMatch(hostname string, connIP string) bool {
 
 	addrs, err := net.LookupIP(hostname)
 	if err != nil {
-		glog.Errorln("Error DNS lookup of "+hostname+": ", err)
+		glog.Errorln("Error DNS lookup of ", hostname, ": ", err)
 		return false
 	}
 
 	for _, ip := range addrs {
 		if ip.String() == connIP {
-			glog.Infoln("Accepting certificate anyway. " + hostname + " has same IP as connection")
+			glog.Infoln("Accepting certificate anyway. ", hostname, " has same IP as connection")
 			return true
 		}
 	}
@@ -381,7 +378,7 @@ func (bot *ircBot) updateServer(config *common.BotConfig) bool {
 
 	err := bot.Close()
 	if err != nil {
-		glog.Infoln("[Error] An error occured while Closing the bot", bot, ": ", err)
+		glog.Errorln("An error occured while Closing the bot", bot, ": ", err)
 	}
 	// TODO (yml) remove
 	// time.Sleep(1 * time.Second) // Wait for timeout to be sure listen has stopped
@@ -415,9 +412,8 @@ func (bot *ircBot) updateNick(newNick, newPass string) {
 // Update the channels based on new configuration, leaving old ones and joining new ones
 func (bot *ircBot) updateChannels(newChannels []*common.Channel) {
 	glog.Infoln("[Info] Starting bot.updateChannels")
-	glog.Infoln("[Debug] newChannels: ", newChannels)
-	glog.Infoln("[Debug] bot.channels: ", bot.channels)
 	bot.RLock()
+	glog.V(3).Infoln("[Debug] newChannels: ", newChannels, "bot.channels:", bot.channels)
 
 	if isEqual(newChannels, bot.channels) {
 		if glog.V(2) {
@@ -425,7 +421,7 @@ func (bot *ircBot) updateChannels(newChannels []*common.Channel) {
 		}
 		return
 	}
-	glog.Infoln("[Info] The channels the bot is connected need to be updated")
+	glog.Infoln("[Info] The channels the bot is connected to need to be updated")
 
 	// PART old ones
 	for _, channel := range bot.channels {
@@ -444,14 +440,9 @@ func (bot *ircBot) updateChannels(newChannels []*common.Channel) {
 		}
 	}
 	bot.RUnlock()
-	glog.Infoln("[Debug] before Lock")
 	bot.Lock()
-	glog.Infoln("[Debug] after Lock")
 	bot.channels = newChannels
-	glog.Infoln("[Debug] before Unlock")
 	bot.Unlock()
-	glog.Infoln("[Debug] after Unlock")
-
 }
 
 // Join channels
@@ -469,7 +460,6 @@ func (bot *ircBot) Whois() {
 // Join an IRC channel
 func (bot *ircBot) join(channel string) {
 	bot.SendRaw("JOIN " + channel)
-	glog.Infoln("[Debug] Exiting bot.join")
 }
 
 // Leave an IRC channel
@@ -488,7 +478,6 @@ func (bot *ircBot) Send(channel, msg string) {
 // Send message down socket. Add \n at end first.
 func (bot *ircBot) SendRaw(msg string) {
 	bot.sendQueue <- []byte(msg + "\n")
-	glog.Infoln("[Debug] Exiting bot.SendRaw")
 }
 
 // Tell the irc server who we are - we can't do anything until this is done.
@@ -515,10 +504,10 @@ func (bot *ircBot) sendPassword() {
 // Actually really send message to the server. Implements rate limiting.
 // Should run in go-routine.
 func (bot *ircBot) sender() {
+	glog.V(2).Infoln("Starting the sender for", bot)
 	var err error
 	reconnect := make(chan struct{})
 	botStats := bot.GetStats()
-	glog.Infoln("[Debug] Starting the sender")
 	for {
 		select {
 		case <-bot.closing:
@@ -530,20 +519,19 @@ func (bot *ircBot) sender() {
 		case <-time.After(bot.rateLimit):
 			select {
 			case data := <-bot.sendQueue:
-				glog.Infoln("[Debug] Pulled data from bot.sendQueue chan:", string(data))
+				glog.V(3).Infoln("[Debug]", bot, " Pulled data from bot.sendQueue chan:", string(data))
 				if bot.socket == nil {
 					// socket does not exist
-					glog.Infoln("[Info] the socket does not exist, exit listen goroutine")
+					glog.Infoln(bot, "the socket does not exist, exit listen goroutine")
 					return
 				}
 
-				if glog.V(1) {
+				if glog.V(2) {
 					glog.Infoln("[RAW", bot, "] -->", string(data))
 				}
-				glog.Infoln("[Debug] Going to write to bot.socket")
 				_, err = bot.socket.Write(data)
 				if err != nil {
-					glog.Errorln("[Error] Error writing to socket to", bot, ": ", err)
+					glog.Errorln("Error writing to socket to", bot, ": ", err)
 					close(reconnect)
 				}
 				botStats.Add("messages", 1)
@@ -569,7 +557,7 @@ func (bot *ircBot) readSocket() {
 				if ok && netErr.Timeout() == true {
 					continue
 				} else {
-					glog.Errorln("[Info] An Error occured while reading from bot.socket ", err)
+					glog.Errorln("An Error occured while reading from bot.socket ", err)
 					return
 				}
 			}
@@ -580,7 +568,7 @@ func (bot *ircBot) readSocket() {
 
 			content := toUnicode(contentData)
 			if glog.V(2) {
-				glog.Infoln("[RAW", bot.String(), "]"+content)
+				glog.Infoln("[RAW", bot, "] <--", content)
 			}
 			bot.receive <- content
 		}
@@ -698,7 +686,7 @@ func (bot *ircBot) Close() (err error) {
 				glog.Infoln("[Info] Closing bot.socket.")
 				err = bot.socket.Close()
 				if err != nil {
-					glog.Infoln("[Error] An error occured while Closing  bot.socket", bot, ": ", err)
+					glog.Errorln("An error occured while Closing  bot.socket", bot, ": ", err)
 				}
 				bot.Lock()
 				bot.socket = nil

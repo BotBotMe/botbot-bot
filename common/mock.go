@@ -18,7 +18,7 @@ type MockSocket struct {
 }
 
 func (sock MockSocket) Write(data []byte) (int, error) {
-	glog.Infoln("[Debug]: Starting MockSocket.Write of:", string(data))
+	glog.V(3).Infoln("[Debug]: Starting MockSocket.Write of:", string(data))
 	if sock.Counter != nil {
 		sock.Counter <- true
 	}

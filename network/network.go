@@ -164,7 +164,7 @@ func (nm *NetworkManager) Shutdown() {
 	for _, bot := range nm.chatbots {
 		err := bot.Close()
 		if err != nil {
-			glog.Infoln("[Error] An error occured while Closing the bot", bot, ": ", err)
+			glog.Errorln("An error occured while Closing the bot", bot, ": ", err)
 		}
 	}
 	nm.Unlock()
