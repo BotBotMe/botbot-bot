@@ -44,8 +44,6 @@ func (nm *NetworkManager) GetUserByChatbotId(id int) string {
 
 // Connect to networks / start chatbots. Loads chatbot configuration from DB.
 func (nm *NetworkManager) RefreshChatbots() {
-	nm.Lock()
-	defer nm.Unlock()
 	if glog.V(2) {
 		glog.Infoln("Entering in NetworkManager.RefreshChatbots")
 	}
@@ -60,13 +58,17 @@ func (nm *NetworkManager) RefreshChatbots() {
 		id = config.Id
 		active = append(active, id)
 
+		nm.RLock()
 		current = nm.chatbots[id]
+		nm.RUnlock()
 		if current == nil {
 			// Create
 			if glog.V(2) {
 				glog.Infoln("Connect the bot with the following config:", config)
 			}
+			nm.Lock()
 			nm.chatbots[id] = nm.Connect(config)
+			nm.Unlock()
 		} else {
 			// Update
 			if glog.V(2) {
@@ -80,7 +82,7 @@ func (nm *NetworkManager) RefreshChatbots() {
 	// Stop old ones
 	active.Sort()
 	numActive := len(active)
-
+	nm.Lock()
 	for currId := range nm.chatbots {
 
 		if active.Search(currId) == numActive { // if currId not in active:
@@ -90,6 +92,7 @@ func (nm *NetworkManager) RefreshChatbots() {
 			delete(nm.chatbots, currId)
 		}
 	}
+	nm.Unlock()
 	if glog.V(2) {
 		glog.Infoln("Exiting NetworkManager.RefreshChatbots")
 	}

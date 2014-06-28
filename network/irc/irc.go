@@ -136,9 +136,8 @@ func (bot *ircBot) GetStats() *expvar.Map {
 }
 
 func (bot *ircBot) String() string {
-	// TODO understand why the Lock prevent the bot form joining
-	//bot.RLock()
-	//defer bot.RUnlock()
+	bot.RLock()
+	defer bot.RUnlock()
 	return fmt.Sprintf("%s on %s", bot.nick, bot.address)
 }
 
@@ -217,13 +216,13 @@ func (bot *ircBot) reconnect() {
 
 // Connect to the IRC server and start listener
 func (bot *ircBot) Init() {
-	bot.Lock()
-	defer bot.Unlock()
 
 	glog.Infoln("Init bot", bot)
+	bot.Lock()
 	bot.closing = make(chan struct{})
 	bot.isConnecting = true
 	bot.isAuthenticating = false
+	bot.Unlock()
 
 	bot.Connect()
 
@@ -234,14 +233,18 @@ func (bot *ircBot) Init() {
 	go bot.monitor()
 
 	// Listen for outgoing messages (rate limited) in background thread
+	bot.Lock()
 	if bot.sendQueue == nil {
 		bot.sendQueue = make(chan []byte, 256)
 	}
+	bot.Unlock()
 	go bot.sender()
 
+	bot.Lock()
 	if bot.serverPass != "" {
 		bot.SendRaw("PASS " + bot.serverPass)
 	}
+	bot.Unlock()
 
 	bot.SendRaw("PING Bonjour")
 }
@@ -598,8 +601,6 @@ func (bot *ircBot) listen() {
 }
 
 func (bot *ircBot) act(theLine *line.Line) {
-	bot.Lock()
-	defer bot.Unlock()
 	// Notify the monitor goroutine that we receive a PONG
 	if theLine.Command == "PONG" {
 		if glog.V(2) {
@@ -612,9 +613,14 @@ func (bot *ircBot) act(theLine *line.Line) {
 	// Send the heartbeat to the monitoring goroutine via monitorChan
 	bot.monitorChan <- struct{}{}
 
+	bot.RLock()
+	isConnecting := bot.isConnecting
+	bot.RUnlock()
 	// As soon as we receive a message from the server, complete initiatization
-	if bot.isConnecting {
+	if isConnecting {
+		bot.Lock()
 		bot.isConnecting = false
+		bot.Unlock()
 		bot.login()
 		return
 	}
@@ -639,7 +645,9 @@ func (bot *ircBot) act(theLine *line.Line) {
 			return
 
 		} else if isConfirm {
+			bot.Lock()
 			bot.isAuthenticating = false
+			bot.Unlock()
 			bot.JoinAll()
 			return
 		}
@@ -647,9 +655,13 @@ func (bot *ircBot) act(theLine *line.Line) {
 
 	// After USER / NICK is accepted, join all the channels,
 	// assuming we don't need to identify with NickServ
-
-	if bot.isAuthenticating && len(bot.password) == 0 {
+	bot.RLock()
+	shouldIdentify := bot.isAuthenticating && len(bot.password) == 0
+	bot.RUnlock()
+	if shouldIdentify {
+		bot.Lock()
 		bot.isAuthenticating = false
+		bot.Unlock()
 		bot.JoinAll()
 		return
 	}
