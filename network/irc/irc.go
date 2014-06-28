@@ -522,8 +522,11 @@ func (bot *ircBot) sender() {
 		case <-time.After(bot.rateLimit):
 			select {
 			case data := <-bot.sendQueue:
-				glog.V(3).Infoln("[Debug]", bot, " Pulled data from bot.sendQueue chan:", string(data))
-				if bot.socket == nil {
+				glog.V(3).Infoln(bot, " Pulled data from bot.sendQueue chan:", string(data))
+				bot.RLock()
+				nilSocket := bot.socket == nil
+				bot.RUnlock()
+				if nilSocket {
 					// socket does not exist
 					glog.Infoln(bot, "the socket does not exist, exit listen goroutine")
 					return
@@ -532,7 +535,9 @@ func (bot *ircBot) sender() {
 				if glog.V(2) {
 					glog.Infoln("[RAW", bot, "] -->", string(data))
 				}
+				bot.RLock()
 				_, err = bot.socket.Write(data)
+				bot.RUnlock()
 				if err != nil {
 					glog.Errorln("Error writing to socket to", bot, ": ", err)
 					close(reconnect)
@@ -711,8 +716,6 @@ func (bot *ircBot) Close() (err error) {
 // Send a non-standard SHUTDOWN message to the plugins
 // This allows them to know that this channel is offline
 func (bot *ircBot) sendShutdown() {
-	bot.RLock()
-	defer bot.RUnlock()
 	glog.Infoln("[Info] Logging Shutdown command in the channels monitored by:", bot)
 	shutLine := &line.Line{
 		Command:   "SHUTDOWN",
@@ -722,10 +725,12 @@ func (bot *ircBot) sendShutdown() {
 		Raw:       "",
 		Content:   ""}
 
+	bot.RLock()
 	for _, channel := range bot.channels {
 		shutLine.Channel = channel.Credential()
 		bot.fromServer <- shutLine
 	}
+	bot.RUnlock()
 }
 
 /*
