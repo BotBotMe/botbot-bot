@@ -713,6 +713,7 @@ func (bot *ircBot) Close() (err error) {
 // This allows them to know that this channel is offline
 func (bot *ircBot) sendShutdown() {
 	glog.Infoln("[Info] Logging Shutdown command in the channels monitored by:", bot)
+	bot.RLock()
 	shutLine := &line.Line{
 		Command:   "SHUTDOWN",
 		Received:  time.Now().UTC().Format(time.RFC3339Nano),
@@ -721,7 +722,6 @@ func (bot *ircBot) sendShutdown() {
 		Raw:       "",
 		Content:   ""}
 
-	bot.RLock()
 	for _, channel := range bot.channels {
 		shutLine.Channel = channel.Credential()
 		bot.fromServer <- shutLine
