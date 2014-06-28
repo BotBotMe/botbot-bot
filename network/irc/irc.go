@@ -182,6 +182,8 @@ func (bot *ircBot) monitor() {
 			// Activate the ping timeout case
 			pingTimeout = time.After(time.Second * 10)
 		case <-bot.pingResponse:
+			// deactivate the case waiting for a pingTimeout because we got a response
+			pingTimeout = nil
 			botStats.Add("pong", 1)
 			pongCounter++
 			if glog.V(1) {
