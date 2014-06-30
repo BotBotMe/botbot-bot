@@ -36,20 +36,21 @@ const (
 )
 
 type chatBotStats struct {
-	sync.Mutex
+	sync.RWMutex
 	m map[string]*expvar.Map
 }
 
 func (s chatBotStats) GetOrCreate(identifier string) (*expvar.Map, bool) {
-	s.Lock()
-	defer s.Unlock()
+	s.RLock()
 	chatbotStats, ok := s.m[identifier]
+	s.RUnlock()
 	if !ok {
 		chatbotStats = expvar.NewMap(identifier)
+		s.Lock()
 		s.m[identifier] = chatbotStats
+		s.Unlock()
 	}
 	return chatbotStats, ok
-
 }
 
 var (
@@ -128,8 +129,6 @@ func (bot *ircBot) GetUser() string {
 }
 
 func (bot *ircBot) GetStats() *expvar.Map {
-	bot.Lock()
-	defer bot.Unlock()
 	stats, _ := BotStats.GetOrCreate(bot.serverIdentifier)
 	return stats
 }
@@ -149,7 +148,6 @@ func (bot *ircBot) String() string {
 func (bot *ircBot) monitor(quit chan struct{}) {
 	var pingTimeout <-chan time.Time
 	reconnect := make(chan struct{})
-	botStats := bot.GetStats()
 	// TODO maxPongWithoutMessage should probably be a field of ircBot
 	maxPingWithoutResponse := 3
 	maxPongWithoutMessage := 150
@@ -172,6 +170,7 @@ func (bot *ircBot) monitor(quit chan struct{}) {
 			bot.Whois()
 		case <-time.After(time.Second * 60):
 			glog.Infoln("[Info] Ping the ircBot server", pongCounter, bot)
+			botStats := bot.GetStats()
 			botStats.Add("ping", 1)
 			bot.SendRaw("PING 1")
 			// Activate the ping timeout case
@@ -179,6 +178,7 @@ func (bot *ircBot) monitor(quit chan struct{}) {
 		case <-bot.pingResponse:
 			// deactivate the case waiting for a pingTimeout because we got a response
 			pingTimeout = nil
+			botStats := bot.GetStats()
 			botStats.Add("pong", 1)
 			pongCounter++
 			if glog.V(1) {
@@ -190,6 +190,7 @@ func (bot *ircBot) monitor(quit chan struct{}) {
 		case <-pingTimeout:
 			// Deactivate the pingTimeout case
 			pingTimeout = nil
+			botStats := bot.GetStats()
 			botStats.Add("missed_ping", 1)
 			missedPing++
 			glog.Infoln("[Info] No pong from ircBot server", bot, "missed", missedPing)
@@ -207,7 +208,6 @@ func (bot *ircBot) ListenAndSend(quit chan struct{}) {
 	glog.V(2).Infoln("Starting the sender for", bot)
 	var err error
 	reconnect := make(chan struct{})
-	botStats := bot.GetStats()
 	for {
 		select {
 		case <-quit:
@@ -217,6 +217,7 @@ func (bot *ircBot) ListenAndSend(quit chan struct{}) {
 		case content := <-bot.receive:
 			theLine, err := parseLine(content)
 			if err == nil {
+				botStats := bot.GetStats()
 				botStats.Add("received_messages", 1)
 				theLine.ChatBotId = bot.id
 				bot.act(theLine)
@@ -248,6 +249,7 @@ func (bot *ircBot) ListenAndSend(quit chan struct{}) {
 					glog.Errorln("Error writing to socket to", bot, ": ", err)
 					close(reconnect)
 				}
+				botStats := bot.GetStats()
 				botStats.Add("messages", 1)
 			default:
 				continue
@@ -451,17 +453,21 @@ func (bot *ircBot) updateServer(config *common.BotConfig) bool {
 
 // Update the nickname we're registered under, if needed
 func (bot *ircBot) updateNick(newNick, newPass string) {
-	bot.Lock()
-	defer bot.Unlock()
 	glog.Infoln("[Info] Starting bot.updateNick()")
-	if newNick == bot.nick {
+
+	bot.RLock()
+	nick := bot.nick
+	bot.RUnlock()
+	if newNick == nick {
 		glog.Infoln("[Info] bot.updateNick() -- the nick has not changed so return")
 		return
 	}
 	glog.Infoln("[Info] bot.updateNick() -- set the new nick")
 
+	bot.Lock()
 	bot.nick = newNick
 	bot.password = newPass
+	bot.Unlock()
 	bot.setNick()
 }
 
