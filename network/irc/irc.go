@@ -102,6 +102,7 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 		monitorChan:      make(chan struct{}),
 		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
 		receive:          make(chan string),
+		sendQueue:        make(chan []byte, 256),
 	}
 
 	chatbotStats, ok := BotStats.GetOrCreate(chatbot.serverIdentifier)
@@ -199,6 +200,62 @@ func (bot *ircBot) monitor(quit chan struct{}) {
 	}
 }
 
+// ListenAndSend receive incoming messages parse them and send response
+// to the server. It implements rate limiting.
+// Should run in go-routine.
+func (bot *ircBot) ListenAndSend(quit chan struct{}) {
+	glog.V(2).Infoln("Starting the sender for", bot)
+	var err error
+	reconnect := make(chan struct{})
+	botStats := bot.GetStats()
+	for {
+		select {
+		case <-quit:
+			return
+		case <-reconnect:
+			bot.reconnect(quit)
+		case content := <-bot.receive:
+			theLine, err := parseLine(content)
+			if err == nil {
+				botStats.Add("received_messages", 1)
+				theLine.ChatBotId = bot.id
+				bot.act(theLine)
+			} else {
+				glog.Errorln("Invalid line:", content)
+			}
+		// Rate limit to one message every tempo
+		// // https://github.com/BotBotMe/botbot-bot/issues/2
+		case <-time.After(bot.rateLimit):
+			select {
+			case data := <-bot.sendQueue:
+				glog.V(3).Infoln(bot, " Pulled data from bot.sendQueue chan:", string(data))
+				bot.RLock()
+				nilSocket := bot.socket == nil
+				bot.RUnlock()
+				if nilSocket {
+					// socket does not exist
+					glog.Infoln(bot, "the socket does not exist, exit listen goroutine")
+					return
+				}
+
+				if glog.V(2) {
+					glog.Infoln("[RAW", bot, "] -->", string(data))
+				}
+				bot.RLock()
+				_, err = bot.socket.Write(data)
+				bot.RUnlock()
+				if err != nil {
+					glog.Errorln("Error writing to socket to", bot, ": ", err)
+					close(reconnect)
+				}
+				botStats.Add("messages", 1)
+			default:
+				continue
+			}
+		}
+	}
+}
+
 // reconnect the ircBot
 func (bot *ircBot) reconnect(quit chan struct{}) {
 	glog.Infoln("Trying to reconnect", bot)
@@ -231,24 +288,16 @@ func (bot *ircBot) Init() {
 	bot.Connect(quit)
 
 	// Listen for incoming messages in background thread
-	go bot.listen(quit)
+	go bot.ListenAndSend(quit)
 
 	// Monitor that we are still getting incoming messages in a background thread
 	go bot.monitor(quit)
 
-	// Listen for outgoing messages (rate limited) in background thread
-	bot.Lock()
-	if bot.sendQueue == nil {
-		bot.sendQueue = make(chan []byte, 256)
-	}
-	bot.Unlock()
-	go bot.sender(quit)
-
-	bot.Lock()
+	bot.RLock()
 	if bot.serverPass != "" {
 		bot.SendRaw("PASS " + bot.serverPass)
 	}
-	bot.Unlock()
+	bot.RUnlock()
 
 	bot.SendRaw("PING Bonjour")
 }
@@ -508,52 +557,6 @@ func (bot *ircBot) sendPassword() {
 	bot.Send("NickServ", "identify "+bot.password)
 }
 
-// Actually really send message to the server. Implements rate limiting.
-// Should run in go-routine.
-func (bot *ircBot) sender(quit chan struct{}) {
-	glog.V(2).Infoln("Starting the sender for", bot)
-	var err error
-	reconnect := make(chan struct{})
-	botStats := bot.GetStats()
-	for {
-		select {
-		case <-quit:
-			return
-		case <-reconnect:
-			bot.reconnect(quit)
-		// Rate limit to one message every tempo
-		// // https://github.com/BotBotMe/botbot-bot/issues/2
-		case <-time.After(bot.rateLimit):
-			select {
-			case data := <-bot.sendQueue:
-				glog.V(3).Infoln(bot, " Pulled data from bot.sendQueue chan:", string(data))
-				bot.RLock()
-				nilSocket := bot.socket == nil
-				bot.RUnlock()
-				if nilSocket {
-					// socket does not exist
-					glog.Infoln(bot, "the socket does not exist, exit listen goroutine")
-					return
-				}
-
-				if glog.V(2) {
-					glog.Infoln("[RAW", bot, "] -->", string(data))
-				}
-				bot.RLock()
-				_, err = bot.socket.Write(data)
-				bot.RUnlock()
-				if err != nil {
-					glog.Errorln("Error writing to socket to", bot, ": ", err)
-					close(reconnect)
-				}
-				botStats.Add("messages", 1)
-			default:
-				continue
-			}
-		}
-	}
-}
-
 // Read from the socket
 func (bot *ircBot) readSocket(quit chan struct{}) {
 
@@ -583,28 +586,6 @@ func (bot *ircBot) readSocket(quit chan struct{}) {
 				glog.Infoln("[RAW", bot, "] <--", content)
 			}
 			bot.receive <- content
-		}
-	}
-}
-
-// Listen for incoming messages. Parse them and put on channel.
-// Should run in go-routine
-func (bot *ircBot) listen(quit chan struct{}) {
-	botStats := bot.GetStats()
-	for {
-		select {
-		case <-quit:
-			return
-		case content := <-bot.receive:
-			theLine, err := parseLine(content)
-			if err == nil {
-				botStats.Add("received_messages", 1)
-				theLine.ChatBotId = bot.id
-				bot.act(theLine)
-			} else {
-				glog.Errorln("Invalid line:", content)
-			}
-
 		}
 	}
 }
