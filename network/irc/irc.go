@@ -475,9 +475,12 @@ func (bot *ircBot) updateNick(newNick, newPass string) {
 func (bot *ircBot) updateChannels(newChannels []*common.Channel) {
 	glog.Infoln("[Info] Starting bot.updateChannels")
 	bot.RLock()
-	glog.V(3).Infoln("[Debug] newChannels: ", newChannels, "bot.channels:", bot.channels)
+	channels := bot.channels
+	bot.RUnlock()
 
-	if isEqual(newChannels, bot.channels) {
+	glog.V(3).Infoln("[Debug] newChannels: ", newChannels, "bot.channels:", channels)
+
+	if isEqual(newChannels, channels) {
 		if glog.V(2) {
 			glog.Infoln("Channels comparison is equals for bot: ", bot.nick)
 		}
@@ -486,7 +489,7 @@ func (bot *ircBot) updateChannels(newChannels []*common.Channel) {
 	glog.Infoln("[Info] The channels the bot is connected to need to be updated")
 
 	// PART old ones
-	for _, channel := range bot.channels {
+	for _, channel := range channels {
 		if !isIn(channel, newChannels) {
 			glog.Infoln("[Info] Parting new channel: ", channel.Credential())
 			bot.part(channel.Credential())
@@ -495,13 +498,11 @@ func (bot *ircBot) updateChannels(newChannels []*common.Channel) {
 
 	// JOIN new ones
 	for _, channel := range newChannels {
-		if !isIn(channel, bot.channels) {
+		if !isIn(channel, channels) {
 			glog.Infoln("[Info] Joining new channel: ", channel.Credential())
 			bot.join(channel.Credential())
-			glog.Infoln("[DEBUG] After join")
 		}
 	}
-	bot.RUnlock()
 	bot.Lock()
 	bot.channels = newChannels
 	bot.Unlock()
