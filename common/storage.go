@@ -73,7 +73,7 @@ func NewPostgresStorage() *PostgresStorage {
 
 	// The following 2 lines mitigate the leak of postgresql connection leak
 	// explicitly setting a maximum number of postgresql connections
-	db.SetMaxOpenConns(5)
+	db.SetMaxOpenConns(10)
 	// explicitly setting a maximum number of Idle postgresql connections
 	db.SetMaxIdleConns(2)
 
