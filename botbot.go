@@ -74,7 +74,9 @@ func (self *BotBot) listen(queueName string) {
 
 func (self *BotBot) mainLoop() {
 
-	go self.recordUserCounts()
+	// TODO (yml) comment out self.recordUserCounts because I think it is
+	// leaking postgres connection.
+	//go self.recordUserCounts()
 
 	var busCommand string
 	var args string
