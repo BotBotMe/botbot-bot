@@ -81,7 +81,6 @@ func (self *BotBot) mainLoop() {
 	var args string
 	for {
 		select {
-
 		case serverLine, ok := <-self.fromServer:
 			if !ok {
 				// Channel is closed, we're offline. Stop.
