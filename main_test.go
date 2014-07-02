@@ -33,6 +33,7 @@ func TestBotBotIRC(t *testing.T) {
 	// Start a Mock IRC server, and gather writes to it
 	server := common.NewMockIRCServer(TEST_MSG, SERVER_PORT)
 	go server.Run(t)
+	time.Sleep(time.Second)
 
 	// Run BotBot
 	botbot := NewBotBot(storage, queue)
