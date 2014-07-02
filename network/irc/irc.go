@@ -201,10 +201,10 @@ func (bot *ircBot) monitor(quit chan struct{}) {
 	}
 }
 
-// ListenAndSend receive incoming messages parse them and send response
+// listenAndSend receive incoming messages parse them and send response
 // to the server. It implements rate limiting.
 // Should run in go-routine.
-func (bot *ircBot) ListenAndSend(quit chan struct{}) {
+func (bot *ircBot) listenAndSend(quit chan struct{}) {
 	glog.V(2).Infoln("Starting the sender for", bot)
 	var err error
 	reconnect := make(chan struct{})
@@ -287,10 +287,10 @@ func (bot *ircBot) init() {
 	bot.isAuthenticating = false
 	bot.Unlock()
 
-	bot.Connect(quit)
+	bot.connect(quit)
 
 	// Listen for incoming messages in background thread
-	go bot.ListenAndSend(quit)
+	go bot.listenAndSend(quit)
 
 	// Monitor that we are still getting incoming messages in a background thread
 	go bot.monitor(quit)
@@ -304,9 +304,9 @@ func (bot *ircBot) init() {
 	bot.SendRaw("PING Bonjour")
 }
 
-// Connect to the server. Here we keep trying every 10 seconds until we manage
+// connect to the server. Here we keep trying every 10 seconds until we manage
 // to Dial to the server.
-func (bot *ircBot) Connect(quit chan struct{}) {
+func (bot *ircBot) connect(quit chan struct{}) {
 
 	var (
 		err     error
