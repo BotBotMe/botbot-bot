@@ -120,7 +120,7 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 		chatbotStats.Add("reply_whoischannels", 0)
 	}
 
-	chatbot.Init()
+	chatbot.init()
 	return chatbot
 }
 
@@ -274,11 +274,11 @@ func (bot *ircBot) reconnect(quit chan struct{}) {
 	}
 
 	time.Sleep(1 * time.Second) // Wait for timeout to be sure listen has stopped
-	bot.Init()
+	bot.init()
 }
 
 // Connect to the IRC server and start listener
-func (bot *ircBot) Init() {
+func (bot *ircBot) init() {
 
 	glog.Infoln("Init bot", bot)
 	bot.Lock()
@@ -446,7 +446,7 @@ func (bot *ircBot) updateServer(config *common.BotConfig) bool {
 	bot.password = config.Config["password"]
 	bot.channels = config.Channels
 
-	bot.Init()
+	bot.init()
 
 	return true
 }

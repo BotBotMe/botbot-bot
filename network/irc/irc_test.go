@@ -187,7 +187,7 @@ func TestFlood(t *testing.T) {
 		receive:          make(chan string),
 		sendQueue:        make(chan []byte, 256),
 	}
-	chatbot.Init()
+	chatbot.init()
 
 	startTime := time.Now()
 
@@ -238,7 +238,7 @@ func TestUpdate(t *testing.T) {
 		receive:          make(chan string),
 		sendQueue:        make(chan []byte, 256),
 	}
-	chatbot.Init()
+	chatbot.init()
 	conf := map[string]string{
 		"nick": "test", "password": "testxyz", "server": "localhost"}
 	channels = append(channels, &NEW_CHANNEL)
