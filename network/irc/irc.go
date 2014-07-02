@@ -54,7 +54,7 @@ func (s chatBotStats) GetOrCreate(identifier string) (*expvar.Map, bool) {
 }
 
 var (
-	// BotStats hold the reference to the expvar.Map for each ircBot instance
+	// BotStats hold the references to the expvar.Map for each ircBot instance
 	BotStats = chatBotStats{m: make(map[string]*expvar.Map)}
 )
 
@@ -71,6 +71,7 @@ type ircBot struct {
 	channels         []*common.Channel
 	isConnecting     bool
 	isAuthenticating bool
+	isClosed         bool
 	sendQueue        chan []byte
 	fromServer       chan *line.Line
 	pingResponse     chan struct{}
@@ -79,7 +80,6 @@ type ircBot struct {
 
 // NewBot create an irc instance of ChatBot
 func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot {
-
 	// realname is set to config["realname"] or config["nick"]
 	realname := config.Config["realname"]
 	if realname == "" {
@@ -122,32 +122,41 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 	return chatbot
 }
 
+// GetUser returns the bot.nick
 func (bot *ircBot) GetUser() string {
+	bot.RLock()
+	defer bot.RUnlock()
 	return bot.nick
 }
 
+// IsRunning the isRunning field
+func (bot *ircBot) IsRunning() bool {
+	bot.RLock()
+	defer bot.RUnlock()
+	return !bot.isClosed
+}
+
+// GetStats returns the expvar.Map for this bot
 func (bot *ircBot) GetStats() *expvar.Map {
 	stats, _ := BotStats.GetOrCreate(bot.serverIdentifier)
 	return stats
 }
 
+// String returns the string representation of the bot
 func (bot *ircBot) String() string {
 	bot.RLock()
 	defer bot.RUnlock()
 	return fmt.Sprintf("%s on %s", bot.nick, bot.address)
 }
 
-// monitor that we are still connected to the IRC server
-// should run in go-routine
-// If no message is received during 60 actively ping ircBot.
-// If ircBot does not reply maxPingWithoutResponse times try to reconnect
-// If ircBot does  replymaxPongWithoutMessage but we are still not getting
-//   is probably something wrong try to reconnect.
+// listenSendMonitor is the main goroutine of the ircBot it listens to the conn
+// send response to irc via the conn and it check that the conn is healthy if
+// it is not it try to reconnect.
 func (bot *ircBot) listenSendMonitor(quit chan struct{}, receive chan string, conn io.ReadWriteCloser) {
 	var pingTimeout <-chan time.Time
 	reconnect := make(chan struct{})
 	// TODO maxPongWithoutMessage should probably be a field of ircBot
-	maxPingWithoutResponse := 3
+	maxPingWithoutResponse := 1 // put it back to 3
 	maxPongWithoutMessage := 150
 	pongCounter := 0
 	missedPing := 0
@@ -159,8 +168,13 @@ func (bot *ircBot) listenSendMonitor(quit chan struct{}, receive chan string, co
 		case <-quit:
 			return
 		case <-reconnect:
-			glog.Infoln("IRC monitoring KO", bot)
-			bot.reconnect(quit)
+			glog.Infoln("IRC monitoring KO shutting down", bot)
+			botStats.Add("restart", 1)
+			err := bot.Close()
+			if err != nil {
+				glog.Errorln("An error occured while Closing the bot", bot, ": ", err)
+			}
+			return
 		case <-whoisTimerChan:
 			bot.Whois()
 			whoisTimerChan = time.After(time.Minute * 5)
@@ -225,22 +239,8 @@ func (bot *ircBot) listenSendMonitor(quit chan struct{}, receive chan string, co
 	}
 }
 
-// reconnect the ircBot
-func (bot *ircBot) reconnect(quit chan struct{}) {
-	glog.Infoln("Trying to reconnect", bot)
-	botStats := bot.GetStats()
-	botStats.Add("restart", 1)
-	err := bot.Close()
-	if err != nil {
-		glog.Errorln("An error occured while Closing the bot", bot, ": ", err)
-	}
-
-	time.Sleep(1 * time.Second) // Wait for timeout to be sure listen has stopped
-	conn := bot.connect()
-	bot.init(conn)
-}
-
-// Connect to the IRC server and start listener
+// init initializes the conn to the ircServer and start all the gouroutines
+// requires to run ircBot
 func (bot *ircBot) init(conn io.ReadWriteCloser) {
 	glog.Infoln("Init bot", bot)
 
@@ -539,7 +539,7 @@ func (bot *ircBot) readSocket(quit chan struct{}, receive chan string, conn io.R
 				if ok && netErr.Timeout() == true {
 					continue
 				} else {
-					glog.Errorln("An Error occured while reading from bot.conn ", err)
+					glog.Errorln("An Error occured while reading from conn ", err)
 					return
 				}
 			}
@@ -642,6 +642,9 @@ func (bot *ircBot) Close() (err error) {
 	glog.Infoln("[Info] Closing bot.")
 	bot.sendShutdown()
 	close(bot.closing)
+	bot.Lock()
+	bot.isClosed = true
+	bot.Unlock()
 	return err
 }
 

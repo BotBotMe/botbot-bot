@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/BotBotMe/botbot-bot/common"
+	"github.com/golang/glog"
 )
 
 const (
@@ -31,7 +32,10 @@ func TestBotBotIRC(t *testing.T) {
 	queue := common.NewMockQueue()
 
 	// Start a Mock IRC server, and gather writes to it
+	glog.Infoln("[Debug] before common.NewMockIRCServer")
+
 	server := common.NewMockIRCServer(TEST_MSG, SERVER_PORT)
+	glog.Infoln("[Debug] After common.NewMockIRCServer")
 	go server.Run(t)
 	time.Sleep(time.Second)
 
@@ -81,9 +85,10 @@ func TestBotBotIRC(t *testing.T) {
 
 // Block until len(target.Get) is at least val, or timeout
 func waitForServer(target *common.MockIRCServer, val int) {
-
+	glog.Infoln("[Debug] waitForServer:")
 	tries := 0
 	for target.GotLength() < val && tries < 200 {
+		glog.Infoln("[Debug] target.Got:", target.Got)
 		time.Sleep(50 * time.Millisecond)
 		tries++
 	}
