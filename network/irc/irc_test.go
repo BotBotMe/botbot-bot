@@ -1,7 +1,6 @@
 package irc
 
 import (
-	"flag"
 	"strconv"
 	"strings"
 	"testing"
@@ -16,15 +15,8 @@ var (
 	NEW_CHANNEL = common.Channel{Name: "#unitnew", Fingerprint: "new-channel-uuid"}
 )
 
-// setGlogFlags walk around a glog issue and force it to log to stderr.
-// It need to be called at the beginning of each test.
-func setGlogFlags() {
-	flag.Set("alsologtostderr", "true")
-	flag.Set("V", "3")
-}
-
 func TestParseLine_welcome(t *testing.T) {
-	setGlogFlags()
+	common.SetGlogFlags()
 
 	line1 := ":barjavel.freenode.net 001 graham_king :Welcome to the freenode Internet Relay Chat Network graham_king"
 	line, err := parseLine(line1)
@@ -42,7 +34,7 @@ func TestParseLine_welcome(t *testing.T) {
 }
 
 func TestParseLine_privmsg(t *testing.T) {
-	setGlogFlags()
+	common.SetGlogFlags()
 	line1 := ":rnowak!~rnowak@q.ovron.com PRIVMSG #linode :totally"
 	line, err := parseLine(line1)
 
@@ -68,7 +60,7 @@ func TestParseLine_privmsg(t *testing.T) {
 }
 
 func TestParseLine_pm(t *testing.T) {
-	setGlogFlags()
+	common.SetGlogFlags()
 
 	line1 := ":graham_king!graham_kin@i.love.debian.org PRIVMSG botbotme :hello"
 	line, err := parseLine(line1)
@@ -89,7 +81,7 @@ func TestParseLine_pm(t *testing.T) {
 }
 
 func TestParseLine_list(t *testing.T) {
-	setGlogFlags()
+	common.SetGlogFlags()
 	line1 := ":oxygen.oftc.net 322 graham_king #linode 412 :Linode Community Support | http://www.linode.com/ | Linodes in Asia-Pacific! - http://bit.ly/ooBzhV"
 	line, err := parseLine(line1)
 
@@ -115,7 +107,7 @@ func TestParseLine_list(t *testing.T) {
 }
 
 func TestParseLine_quit(t *testing.T) {
-	setGlogFlags()
+	common.SetGlogFlags()
 	line1 := ":nicolaslara!~nicolasla@c83-250-0-151.bredband.comhem.se QUIT :"
 	line, err := parseLine(line1)
 	if err != nil {
@@ -127,7 +119,7 @@ func TestParseLine_quit(t *testing.T) {
 }
 
 func TestParseLine_part(t *testing.T) {
-	setGlogFlags()
+	common.SetGlogFlags()
 	line1 := ":nicolaslara!~nicolasla@c83-250-0-151.bredband.comhem.se PART #lincolnloop-internal"
 	line, err := parseLine(line1)
 	if err != nil {
@@ -142,7 +134,7 @@ func TestParseLine_part(t *testing.T) {
 }
 
 func TestParseLine_353(t *testing.T) {
-	setGlogFlags()
+	common.SetGlogFlags()
 	line1 := ":hybrid7.debian.local 353 botbot = #test :@botbot graham_king"
 	line, err := parseLine(line1)
 	if err != nil {
@@ -161,7 +153,7 @@ func TestParseLine_353(t *testing.T) {
 
 // Test sending messages too fast
 func TestFlood(t *testing.T) {
-	setGlogFlags()
+	common.SetGlogFlags()
 
 	NUM := 5
 
@@ -181,13 +173,10 @@ func TestFlood(t *testing.T) {
 		rateLimit:        time.Second,
 		fromServer:       fromServer,
 		channels:         channels,
-		socket:           mockSocket,
-		monitorChan:      make(chan struct{}),
 		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
-		receive:          make(chan string),
 		sendQueue:        make(chan []byte, 256),
 	}
-	chatbot.init()
+	chatbot.init(mockSocket)
 
 	startTime := time.Now()
 
@@ -212,7 +201,7 @@ func TestFlood(t *testing.T) {
 
 // Test joining additional channels
 func TestUpdate(t *testing.T) {
-	setGlogFlags()
+	common.SetGlogFlags()
 	glog.Infoln("[DEBUG] starting TestUpdate")
 
 	fromServer := make(chan *line.Line)
@@ -231,14 +220,11 @@ func TestUpdate(t *testing.T) {
 		serverIdentifier: "localhost.test1",
 		fromServer:       fromServer,
 		channels:         channels,
-		socket:           mockSocket,
 		rateLimit:        time.Second,
-		monitorChan:      make(chan struct{}),
 		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
-		receive:          make(chan string),
 		sendQueue:        make(chan []byte, 256),
 	}
-	chatbot.init()
+	chatbot.init(mockSocket)
 	conf := map[string]string{
 		"nick": "test", "password": "testxyz", "server": "localhost"}
 	channels = append(channels, &NEW_CHANNEL)
@@ -264,7 +250,7 @@ func TestUpdate(t *testing.T) {
 }
 
 func TestToUnicodeUTF8(t *testing.T) {
-	setGlogFlags()
+	common.SetGlogFlags()
 	msg := "ελληνικά"
 	result := toUnicode([]byte(msg))
 	if result != msg {
@@ -273,7 +259,7 @@ func TestToUnicodeUTF8(t *testing.T) {
 }
 
 func TestToUnicodeLatin1(t *testing.T) {
-	setGlogFlags()
+	common.SetGlogFlags()
 	msg := "âôé"
 	latin1_bytes := []byte{0xe2, 0xf4, 0xe9}
 	result := toUnicode(latin1_bytes)
@@ -283,7 +269,7 @@ func TestToUnicodeLatin1(t *testing.T) {
 }
 
 func TestSplitChannels(t *testing.T) {
-	setGlogFlags()
+	common.SetGlogFlags()
 	input := "#aone, #btwo, #cthree"
 	result := splitChannels(input)
 	if len(result) != 3 || result[2] != "#cthree" {
