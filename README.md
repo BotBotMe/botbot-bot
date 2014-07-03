@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/BotBotMe/botbot-bot.png)](https://travis-ci.org/BotBotMe/botbot-bot)
+[![Coverage Status](https://coveralls.io/repos/yml/botbot-bot/badge.png)](https://coveralls.io/r/yml/botbot-bot)
 
 The bot used in botbot.me is a Go (1.2) program. To install:
 
