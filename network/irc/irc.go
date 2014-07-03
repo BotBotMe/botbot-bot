@@ -302,15 +302,26 @@ func (bot *ircBot) connect() (conn io.ReadWriteCloser) {
 				glog.Infoln("Connected: TLS secure")
 				return conn
 			} else if _, ok := err.(x509.HostnameError); ok {
-				glog.Infoln("Could not connect using TLS because: ", err)
+				glog.Errorln("Could not connect using TLS because: ", err)
 				// Certificate might not match. This happens on irc.cloudfront.net
 				insecure := &tls.Config{InsecureSkipVerify: true}
 				conn, err = tls.Dial("tcp", bot.address, insecure)
 
 				if err == nil && isCertValid(conn.(*tls.Conn)) {
-					glog.Infoln("Connected: TLS with awkward certificate")
+					glog.Errorln("Connected: TLS with awkward certificate")
 					return conn
 				}
+			} else if _, ok := err.(x509.UnknownAuthorityError); ok {
+				glog.Errorln("x509.UnknownAuthorityError : ", err)
+				insecure := &tls.Config{InsecureSkipVerify: true}
+				conn, err = tls.Dial("tcp", bot.address, insecure)
+				if err == nil {
+					glog.Infoln("Connected: TLS with an x509.UnknownAuthorityError", err)
+					return conn
+				}
+			} else {
+				glog.Errorln("Could not establish a tls connection", err)
+
 			}
 
 			conn, err = net.Dial("tcp", bot.address)
