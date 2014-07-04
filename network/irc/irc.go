@@ -146,7 +146,7 @@ func (bot *ircBot) GetStats() *expvar.Map {
 func (bot *ircBot) String() string {
 	bot.RLock()
 	defer bot.RUnlock()
-	return fmt.Sprintf("%s on %s", bot.nick, bot.address)
+	return fmt.Sprintf("%s on %s (%p)", bot.nick, bot.address, bot)
 }
 
 // listenSendMonitor is the main goroutine of the ircBot it listens to the conn
