@@ -16,7 +16,7 @@ import (
 // It need to be called at the beginning of each test.
 func SetGlogFlags() {
 	flag.Set("alsologtostderr", "true")
-	flag.Set("V", "3")
+	flag.Set("v", "3")
 }
 
 // MockSocket is a dummy implementation of ReadWriteCloser
