@@ -9,6 +9,7 @@ import (
 
 	pq "github.com/bmizerany/pq"
 	"github.com/monnand/goredis"
+	"github.com/joho/godotenv"
 
 	// local packages
 	"github.com/lincolnloop/botbot-bot/common"
@@ -35,6 +36,13 @@ const (
 func main() {
 
 	log.Println("START. Use 'botbot -help' for command line options.")
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	log.Println("Environment variables have been set from the .env file")
+	log.Println("STORAGE_URL: ", os.Getenv("STORAGE_URL"))
+	log.Println("REDIS_PLUGIN_QUEUE_URL: ", os.Getenv("REDIS_PLUGIN_QUEUE_URL"))
 
 	storage := NewPostgresStorage()
 	defer storage.Close()

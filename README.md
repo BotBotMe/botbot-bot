@@ -11,7 +11,7 @@ External resources:
 
 Configuration is handled via environment variables:
 
-    DATABASE_URL=postgres://user:password@host:port/db_name \
+    STORAGE_URL=postgres://user:password@host:port/db_name \
     REDIS_PLUGIN_QUEUE_URL=redis://host:port/db_number botbot-bot
 
 ## Architecture
