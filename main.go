@@ -239,7 +239,7 @@ type PostgresStorage struct {
 
 // Connect to the database.
 func NewPostgresStorage() *PostgresStorage {
-	postgresUrlString := os.Getenv("DATABASE_URL")
+	postgresUrlString := os.Getenv("STORAGE_URL")
 	if postgresUrlString == "" {
 		postgresUrlString = "postgres://localhost/botbot"
 	}
