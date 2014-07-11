@@ -11,7 +11,6 @@ import (
 
 	"github.com/BotBotMe/botbot-bot/common"
 	"github.com/golang/glog"
-	"github.com/joho/godotenv"
 	_ "net/http/pprof"
 
 )
@@ -23,16 +22,10 @@ const (
 
 func main() {
 	flag.Parse()
-	glog.Infoln("START. Use 'botbot -help' for command line options.")
 
-	log.Println("START. Use 'botbot -help' for command line options.")
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
-	log.Println("Environment variables have been set from the .env file")
-	log.Println("STORAGE_URL: ", os.Getenv("STORAGE_URL"))
-	log.Println("REDIS_PLUGIN_QUEUE_URL: ", os.Getenv("REDIS_PLUGIN_QUEUE_URL"))
+	glog.Infoln("START. Use 'botbot -help' for command line options.")
+	glog.Infoln("STORAGE_URL: ", os.Getenv("STORAGE_URL"))
+	glog.Infoln("REDIS_PLUGIN_QUEUE_URL: ", os.Getenv("REDIS_PLUGIN_QUEUE_URL"))
 
 	storage := common.NewPostgresStorage()
 	defer storage.Close()
