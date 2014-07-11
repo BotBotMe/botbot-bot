@@ -203,7 +203,7 @@ func (self *BotBot) handleCommand(cmd string, args string) {
 			Command:   "PRIVMSG",
 			Received:  time.Now().UTC().Format(time.RFC3339Nano),
 			Content:   parts[2],
-			Channel:   strings.TrimSpace(parts[1])}
+			Channel:   parts[1]}
 		self.dis.Dispatch(internalLine)
 
 	case "REFRESH":
