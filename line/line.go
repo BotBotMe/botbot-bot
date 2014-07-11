@@ -3,7 +3,8 @@ package line
 import (
 	"encoding/json"
 	"errors"
-	"log"
+
+	"github.com/golang/glog"
 )
 
 var (
@@ -33,7 +34,7 @@ func (self *Line) String() string {
 func (self *Line) AsJson() []byte {
 	jsonData, err := json.Marshal(self)
 	if err != nil {
-		log.Println("Error on json Marshal of "+self.Raw, err)
+		glog.Infoln("Error on json Marshal of "+self.Raw, err)
 	}
 	// client expects lines to have an ending
 	jsonData = append(jsonData, '\n')

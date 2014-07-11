@@ -1,8 +1,8 @@
 package dispatch
 
 import (
-	"github.com/lincolnloop/botbot-bot/common"
-	"github.com/lincolnloop/botbot-bot/line"
+	"github.com/BotBotMe/botbot-bot/common"
+	"github.com/BotBotMe/botbot-bot/line"
 	"testing"
 )
 

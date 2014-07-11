@@ -1,7 +1,7 @@
 // IRC server connection
 //
 // Connecting to an IRC server goes like this:
-// 1. Connect to the socket. Wait for a response (anything will do).
+// 1. Connect to the conn. Wait for a response (anything will do).
 // 2. Send USER and NICK. Wait for a response (anything).
 // 2.5 If we have a password, wait for NickServ to ask for it, and to confirm authentication
 // 3. JOIN channels
@@ -10,171 +10,331 @@ package irc
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/tls"
 	"crypto/x509"
-	"github.com/lincolnloop/botbot-bot/common"
-	"github.com/lincolnloop/botbot-bot/line"
+	"expvar"
+	"fmt"
 	"io"
-	"log"
 	"net"
 	"sort"
-	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/golang/glog"
+
+	"github.com/BotBotMe/botbot-bot/common"
+	"github.com/BotBotMe/botbot-bot/line"
 )
 
 const (
-	VERSION = "botbotme v0.2"
+	// VERSION of the botbot-bot
+	VERSION = "botbot v0.3.0"
+	// RPL_WHOISCHANNELS IRC command code from the spec
+	RPL_WHOISCHANNELS = "319"
+)
+
+type chatBotStats struct {
+	sync.RWMutex
+	m map[string]*expvar.Map
+}
+
+func (s chatBotStats) GetOrCreate(identifier string) (*expvar.Map, bool) {
+	s.RLock()
+	chatbotStats, ok := s.m[identifier]
+	s.RUnlock()
+	if !ok {
+		chatbotStats = expvar.NewMap(identifier)
+		s.Lock()
+		s.m[identifier] = chatbotStats
+		s.Unlock()
+	}
+	return chatbotStats, ok
+}
+
+var (
+	// BotStats hold the references to the expvar.Map for each ircBot instance
+	BotStats = chatBotStats{m: make(map[string]*expvar.Map)}
 )
 
 type ircBot struct {
+	sync.RWMutex
 	id               int
 	address          string
-	socket           io.ReadWriteCloser
 	nick             string
 	realname         string
 	password         string
 	serverPass       string
-	fromServer       chan *line.Line
-	channels         []string
-	isRunning        bool
+	serverIdentifier string
+	rateLimit        time.Duration // Duration used to rate limit send
+	channels         []*common.Channel
 	isConnecting     bool
 	isAuthenticating bool
+	isClosed         bool
 	sendQueue        chan []byte
-	monitorChan      chan string
+	fromServer       chan *line.Line
+	pingResponse     chan struct{}
+	closing          chan struct{}
 }
 
+// NewBot create an irc instance of ChatBot
 func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot {
-
 	// realname is set to config["realname"] or config["nick"]
 	realname := config.Config["realname"]
 	if realname == "" {
 		realname = config.Config["nick"]
 	}
 
+	// Initialize the bot.
 	chatbot := &ircBot{
-		id:          config.Id,
-		address:     config.Config["server"],
-		nick:        config.Config["nick"],
-		realname:    realname,
-		password:    config.Config["password"],        // NickServ password
-		serverPass:  config.Config["server_password"], // PASS password
-		fromServer:  fromServer,
-		channels:    config.Channels,
-		monitorChan: make(chan string),
-		isRunning:   true,
+		id:               config.Id,
+		address:          config.Config["server"],
+		nick:             config.Config["nick"],
+		realname:         realname,
+		password:         config.Config["password"],        // NickServ password
+		serverPass:       config.Config["server_password"], // PASS password
+		serverIdentifier: config.Config["server_identifier"],
+		rateLimit:        time.Second,
+		fromServer:       fromServer,
+		channels:         config.Channels,
+		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
+		sendQueue:        make(chan []byte, 256),
+		closing:          make(chan struct{}),
 	}
 
-	chatbot.init()
+	chatbotStats, ok := BotStats.GetOrCreate(chatbot.serverIdentifier)
 
+	// Initialize the counter for the exported variable
+	if !ok {
+		chatbotStats.Add("channels", 0)
+		chatbotStats.Add("messages", 0)
+		chatbotStats.Add("received_messages", 0)
+		chatbotStats.Add("ping", 0)
+		chatbotStats.Add("pong", 0)
+		chatbotStats.Add("missed_ping", 0)
+		chatbotStats.Add("restart", 0)
+		chatbotStats.Add("reply_whoischannels", 0)
+	}
+
+	conn := chatbot.connect()
+	chatbot.init(conn)
 	return chatbot
 }
-func (self *ircBot) GetUser() string {
-	return self.nick
+
+// GetUser returns the bot.nick
+func (bot *ircBot) GetUser() string {
+	bot.RLock()
+	defer bot.RUnlock()
+	return bot.nick
 }
 
-// Monitor that we are still connected to the IRC server
-// should run in go-routine
-func (self *ircBot) monitor() {
-	for self.isRunning {
+// IsRunning the isRunning field
+func (bot *ircBot) IsRunning() bool {
+	bot.RLock()
+	defer bot.RUnlock()
+	return !bot.isClosed
+}
+
+// GetStats returns the expvar.Map for this bot
+func (bot *ircBot) GetStats() *expvar.Map {
+	stats, _ := BotStats.GetOrCreate(bot.serverIdentifier)
+	return stats
+}
+
+// String returns the string representation of the bot
+func (bot *ircBot) String() string {
+	bot.RLock()
+	defer bot.RUnlock()
+	return fmt.Sprintf("%s on %s (%p)", bot.nick, bot.address, bot)
+}
+
+// listenSendMonitor is the main goroutine of the ircBot it listens to the conn
+// send response to irc via the conn and it check that the conn is healthy if
+// it is not it try to reconnect.
+func (bot *ircBot) listenSendMonitor(quit chan struct{}, receive chan string, conn io.ReadWriteCloser) {
+	var pingTimeout <-chan time.Time
+	reconnect := make(chan struct{})
+	// TODO maxPongWithoutMessage should probably be a field of ircBot
+	maxPingWithoutResponse := 1 // put it back to 3
+	maxPongWithoutMessage := 150
+	pongCounter := 0
+	missedPing := 0
+	whoisTimerChan := time.After(time.Minute * 5)
+
+	botStats := bot.GetStats()
+	for {
 		select {
-		case <-self.monitorChan:
-		case <-time.After(time.Minute * 10):
-			log.Println("IRC monitoring KO ; Trying to reconnect.")
-			self.Close()
-			self.Connect()
+		case <-quit:
+			return
+		case <-reconnect:
+			glog.Infoln("IRC monitoring KO shutting down", bot)
+			botStats.Add("restart", 1)
+			err := bot.Close()
+			if err != nil {
+				glog.Errorln("An error occured while Closing the bot", bot, ": ", err)
+			}
+			return
+		case <-whoisTimerChan:
+			bot.Whois()
+			whoisTimerChan = time.After(time.Minute * 5)
+		case <-time.After(time.Second * 60):
+			glog.Infoln("[Info] Ping the ircBot server", pongCounter, bot)
+			botStats.Add("ping", 1)
+			bot.SendRaw("PING 1")
+			// Activate the ping timeout case
+			pingTimeout = time.After(time.Second * 10)
+		case <-bot.pingResponse:
+			// deactivate the case waiting for a pingTimeout because we got a response
+			pingTimeout = nil
+			botStats.Add("pong", 1)
+			pongCounter++
+			if glog.V(1) {
+				glog.Infoln("[Info] Pong from ircBot server", bot)
+			}
+			if pongCounter > maxPongWithoutMessage {
+				close(reconnect)
+			}
+		case <-pingTimeout:
+			// Deactivate the pingTimeout case
+			pingTimeout = nil
+			botStats.Add("missed_ping", 1)
+			missedPing++
+			glog.Infoln("[Info] No pong from ircBot server", bot, "missed", missedPing)
+			if missedPing > maxPingWithoutResponse {
+				close(reconnect)
+			}
+		case content := <-receive:
+			theLine, err := parseLine(content)
+			if err == nil {
+				botStats.Add("received_messages", 1)
+				bot.RLock()
+				theLine.ChatBotId = bot.id
+				bot.RUnlock()
+				bot.act(theLine)
+				pongCounter = 0
+				missedPing = 0
+				// Deactivate the pingTimeout case
+				pingTimeout = nil
+
+			} else {
+				glog.Errorln("Invalid line:", content)
+			}
+		// Rate limit to one message every tempo
+		// // https://github.com/BotBotMe/botbot-bot/issues/2
+		case data := <-bot.sendQueue:
+			glog.V(3).Infoln(bot, " Pulled data from bot.sendQueue chan:", string(data))
+			if glog.V(2) {
+				glog.Infoln("[RAW", bot, "] -->", string(data))
+			}
+			_, err := conn.Write(data)
+			if err != nil {
+				glog.Errorln("Error writing to conn to", bot, ": ", err)
+				close(reconnect)
+			}
+			botStats.Add("messages", 1)
+			time.Sleep(bot.rateLimit)
+
 		}
 	}
 }
 
-// Ping the server every 5 min to keep the connection open
-func (self *ircBot) pinger() {
-	i := 0
-	for self.isRunning {
-		<-time.After(time.Minute * 5)
-		i = i + 1
-		self.SendRaw("PING " + strconv.Itoa(i))
-	}
-}
+// init initializes the conn to the ircServer and start all the gouroutines
+// requires to run ircBot
+func (bot *ircBot) init(conn io.ReadWriteCloser) {
+	glog.Infoln("Init bot", bot)
 
-// Connect to the IRC server and start listener
-func (self *ircBot) init() {
+	quit := make(chan struct{})
+	receive := make(chan string)
 
-	self.isConnecting = true
-	self.isAuthenticating = false
-
-	self.Connect()
+	go bot.readSocket(quit, receive, conn)
 
 	// Listen for incoming messages in background thread
-	go self.listen()
+	go bot.listenSendMonitor(quit, receive, conn)
 
-	// Monitor that we are still getting incoming messages in a background thread
-	go self.monitor()
-
-	// Pinger that Ping the server every 5 min
-	go self.pinger()
-
-	// Listen for outgoing messages (rate limited) in background thread
-	if self.sendQueue == nil {
-		self.sendQueue = make(chan []byte, 256)
-	}
-	go self.sender()
-
-	if self.serverPass != "" {
-		self.SendRaw("PASS " + self.serverPass)
-	}
-
-	self.SendRaw("PING Bonjour")
-}
-
-// Connect to the server
-func (self *ircBot) Connect() {
-
-	if self.socket != nil {
-		// socket already set, unit tests need this
-		return
-	}
-
-	var socket net.Conn
-	var err error
-
-	for {
-		log.Println("Connecting to IRC server: ", self.address)
-
-		socket, err = tls.Dial("tcp", self.address, nil) // Always try TLS first
-		if err == nil {
-			log.Println("Connected: TLS secure")
-			break
-		}
-
-		log.Println("Could not connect using TLS because: ", err)
-
-		_, ok := err.(x509.HostnameError)
-		if ok {
-			// Certificate might not match. This happens on irc.cloudfront.net
-			insecure := &tls.Config{InsecureSkipVerify: true}
-			socket, err = tls.Dial("tcp", self.address, insecure)
-
-			if err == nil && isCertValid(socket.(*tls.Conn)) {
-				log.Println("Connected: TLS with awkward certificate")
-				break
+	go func(bot *ircBot, conn io.Closer) {
+		for {
+			select {
+			case <-bot.closing:
+				err := conn.Close()
+				if err != nil {
+					glog.Errorln("An error occured while closing the conn of", bot, err)
+				}
+				close(quit)
+				return
 			}
 		}
+	}(bot, conn)
 
-		socket, err = net.Dial("tcp", self.address)
-
-		if err == nil {
-			log.Println("Connected: Plain text insecure")
-			break
-		}
-
-		log.Println("IRC Connect error. Will attempt to re-connect. ", err)
-		time.Sleep(1 * time.Second)
+	bot.RLock()
+	if bot.serverPass != "" {
+		bot.SendRaw("PASS " + bot.serverPass)
 	}
+	bot.RUnlock()
 
-	self.socket = socket
+	bot.SendRaw("PING Bonjour")
+}
+
+// connect to the server. Here we keep trying every 10 seconds until we manage
+// to Dial to the server.
+func (bot *ircBot) connect() (conn io.ReadWriteCloser) {
+
+	var (
+		err     error
+		counter int
+	)
+
+	connectTimeout := time.After(0)
+
+	bot.Lock()
+	bot.isConnecting = true
+	bot.isAuthenticating = false
+	bot.Unlock()
+
+	for {
+		select {
+		case <-connectTimeout:
+			counter++
+			connectTimeout = nil
+			glog.Infoln("[Info] Connecting to IRC server: ", bot.address)
+			conn, err = tls.Dial("tcp", bot.address, nil) // Always try TLS first
+			if err == nil {
+				glog.Infoln("Connected: TLS secure")
+				return conn
+			} else if _, ok := err.(x509.HostnameError); ok {
+				glog.Errorln("Could not connect using TLS because: ", err)
+				// Certificate might not match. This happens on irc.cloudfront.net
+				insecure := &tls.Config{InsecureSkipVerify: true}
+				conn, err = tls.Dial("tcp", bot.address, insecure)
+
+				if err == nil && isCertValid(conn.(*tls.Conn)) {
+					glog.Errorln("Connected: TLS with awkward certificate")
+					return conn
+				}
+			} else if _, ok := err.(x509.UnknownAuthorityError); ok {
+				glog.Errorln("x509.UnknownAuthorityError : ", err)
+				insecure := &tls.Config{InsecureSkipVerify: true}
+				conn, err = tls.Dial("tcp", bot.address, insecure)
+				if err == nil {
+					glog.Infoln("Connected: TLS with an x509.UnknownAuthorityError", err)
+					return conn
+				}
+			} else {
+				glog.Errorln("Could not establish a tls connection", err)
+
+			}
+
+			conn, err = net.Dial("tcp", bot.address)
+			if err == nil {
+				glog.Infoln("Connected: Plain text insecure")
+				return conn
+			}
+			// TODO (yml) At some point we might want to panic
+			delay := 5 * counter
+			glog.Infoln("IRC Connect error. Will attempt to re-connect. ", err, "in", delay, "seconds")
+			connectTimeout = time.After(time.Duration(delay) * time.Second)
+		}
+	}
 }
 
 /* Check that the TLS connection's certficate can be applied to this connection.
@@ -191,12 +351,11 @@ func isCertValid(conn *tls.Conn) bool {
 		// Cert has single name, the usual case
 		return isIPMatch(cert.Subject.CommonName, connAddr)
 
-	} else {
-		// Cert has several valid names
-		for _, certname := range cert.DNSNames {
-			if isIPMatch(certname, connAddr) {
-				return true
-			}
+	}
+	// Cert has several valid names
+	for _, certname := range cert.DNSNames {
+		if isIPMatch(certname, connAddr) {
+			return true
 		}
 	}
 
@@ -205,17 +364,17 @@ func isCertValid(conn *tls.Conn) bool {
 
 // Does hostname have IP address connIP?
 func isIPMatch(hostname string, connIP string) bool {
-	log.Println("Checking IP of", hostname)
+	glog.Infoln("Checking IP of", hostname)
 
 	addrs, err := net.LookupIP(hostname)
 	if err != nil {
-		log.Println("Error DNS lookup of "+hostname+": ", err)
+		glog.Errorln("Error DNS lookup of ", hostname, ": ", err)
 		return false
 	}
 
 	for _, ip := range addrs {
 		if ip.String() == connIP {
-			log.Println("Accepting certificate anyway. " + hostname + " has same IP as connection")
+			glog.Infoln("Accepting certificate anyway. ", hostname, " has same IP as connection")
 			return true
 		}
 	}
@@ -223,213 +382,215 @@ func isIPMatch(hostname string, connIP string) bool {
 }
 
 // Update bot configuration. Called when webapp changes a chatbot's config.
-func (self *ircBot) Update(config *common.BotConfig) {
+func (bot *ircBot) Update(config *common.BotConfig) {
 
-	isNewServer := self.updateServer(config.Config)
+	isNewServer := bot.updateServer(config)
 	if isNewServer {
+		glog.Infoln("[Info] the config is from a new server.")
 		// If the server changed, we've already done nick and channel changes too
 		return
 	}
+	glog.Infoln("[Info] bot.Update -- It is not a new server.")
 
-	self.updateNick(config.Config["nick"], config.Config["password"])
-	self.updateChannels(config.Channels)
+	bot.updateNick(config.Config["nick"], config.Config["password"])
+	bot.updateChannels(config.Channels)
 }
 
 // Update the IRC server we're connected to
-func (self *ircBot) updateServer(config map[string]string) bool {
+func (bot *ircBot) updateServer(config *common.BotConfig) bool {
 
-	addr := config["server"]
-	if addr == self.address {
+	addr := config.Config["server"]
+	if addr == bot.address {
 		return false
 	}
 
-	log.Println("Changing IRC server from ", self.address, " to ", addr)
+	glog.Infoln("[Info] Changing IRC server from ", bot.address, " to ", addr)
 
-	self.Close()
-	time.Sleep(1 * time.Second) // Wait for timeout to be sure listen has stopped
+	err := bot.Close()
+	if err != nil {
+		glog.Errorln("An error occured while Closing the bot", bot, ": ", err)
+	}
 
-	self.address = addr
-	self.nick = config["nick"]
-	self.password = config["password"]
-	self.channels = splitChannels(config["rooms"])
+	bot.address = addr
+	bot.nick = config.Config["nick"]
+	bot.password = config.Config["password"]
+	bot.channels = config.Channels
 
-	self.init()
+	conn := bot.connect()
+	bot.init(conn)
 
 	return true
 }
 
 // Update the nickname we're registered under, if needed
-func (self *ircBot) updateNick(newNick, newPass string) {
-	if newNick == self.nick {
+func (bot *ircBot) updateNick(newNick, newPass string) {
+	glog.Infoln("[Info] Starting bot.updateNick()")
+
+	bot.RLock()
+	nick := bot.nick
+	bot.RUnlock()
+	if newNick == nick {
+		glog.Infoln("[Info] bot.updateNick() -- the nick has not changed so return")
 		return
 	}
+	glog.Infoln("[Info] bot.updateNick() -- set the new nick")
 
-	self.nick = newNick
-	self.password = newPass
-	self.setNick()
+	bot.Lock()
+	bot.nick = newNick
+	bot.password = newPass
+	bot.Unlock()
+	bot.setNick()
 }
 
 // Update the channels based on new configuration, leaving old ones and joining new ones
-func (self *ircBot) updateChannels(newChannels []string) {
+func (bot *ircBot) updateChannels(newChannels []*common.Channel) {
+	glog.Infoln("[Info] Starting bot.updateChannels")
+	bot.RLock()
+	channels := bot.channels
+	bot.RUnlock()
 
-	if isEqual(newChannels, self.channels) {
+	glog.V(3).Infoln("[Debug] newChannels: ", newChannels, "bot.channels:", channels)
+
+	if isEqual(newChannels, channels) {
+		if glog.V(2) {
+			glog.Infoln("Channels comparison is equals for bot: ", bot.nick)
+		}
 		return
 	}
+	glog.Infoln("[Info] The channels the bot is connected to need to be updated")
 
 	// PART old ones
-	for _, channel := range self.channels {
+	for _, channel := range channels {
 		if !isIn(channel, newChannels) {
-			self.part(channel)
+			glog.Infoln("[Info] Parting new channel: ", channel.Credential())
+			bot.part(channel.Credential())
 		}
 	}
 
 	// JOIN new ones
 	for _, channel := range newChannels {
-		if !isIn(channel, self.channels) {
-			self.join(channel)
+		if !isIn(channel, channels) {
+			glog.Infoln("[Info] Joining new channel: ", channel.Credential())
+			bot.join(channel.Credential())
 		}
 	}
-
-	self.channels = newChannels
+	bot.Lock()
+	bot.channels = newChannels
+	bot.Unlock()
 }
 
 // Join channels
-func (self *ircBot) JoinAll() {
-	for _, channel := range self.channels {
-		self.join(channel)
+func (bot *ircBot) JoinAll() {
+	for _, channel := range bot.channels {
+		bot.join(channel.Credential())
 	}
+}
+
+// Whois is used to query information about the bot
+func (bot *ircBot) Whois() {
+	bot.SendRaw("WHOIS " + bot.nick)
 }
 
 // Join an IRC channel
-func (self *ircBot) join(channel string) {
-	self.SendRaw("JOIN " + channel)
+func (bot *ircBot) join(channel string) {
+	bot.SendRaw("JOIN " + channel)
 }
 
 // Leave an IRC channel
-func (self *ircBot) part(channel string) {
-	self.SendRaw("PART " + channel)
+func (bot *ircBot) part(channel string) {
+	bot.SendRaw("PART " + channel)
+	botStats := bot.GetStats()
+	botStats.Add("channels", -1)
 }
 
 // Send a regular (non-system command) IRC message
-func (self *ircBot) Send(channel, msg string) {
+func (bot *ircBot) Send(channel, msg string) {
 	fullmsg := "PRIVMSG " + channel + " :" + msg
-	self.SendRaw(fullmsg)
+	bot.SendRaw(fullmsg)
 }
 
-// Send message down socket. Add \n at end first.
-func (self *ircBot) SendRaw(msg string) {
-	self.sendQueue <- []byte(msg + "\n")
+// Send message down conn. Add \n at end first.
+func (bot *ircBot) SendRaw(msg string) {
+	bot.sendQueue <- []byte(msg + "\n")
 }
 
 // Tell the irc server who we are - we can't do anything until this is done.
-func (self *ircBot) login() {
+func (bot *ircBot) login() {
 
-	self.isAuthenticating = true
+	bot.isAuthenticating = true
 
 	// We use the botname as the 'realname', because bot's don't have real names!
-	self.SendRaw("USER " + self.nick + " 0 * :" + self.realname)
+	bot.SendRaw("USER " + bot.nick + " 0 * :" + bot.realname)
 
-	self.setNick()
+	bot.setNick()
 }
 
-// Tell the network our nick
-func (self *ircBot) setNick() {
-	self.SendRaw("NICK " + self.nick)
+// Tell the network our
+func (bot *ircBot) setNick() {
+	bot.SendRaw("NICK " + bot.nick)
 }
 
 // Tell NickServ our password
-func (self *ircBot) sendPassword() {
-	self.Send("NickServ", "identify "+self.password)
+func (bot *ircBot) sendPassword() {
+	bot.Send("NickServ", "identify "+bot.password)
 }
 
-// Actually really send message to the server. Implements rate limiting.
-// Should run in go-routine.
-func (self *ircBot) sender() {
+// Read from the conn
+func (bot *ircBot) readSocket(quit chan struct{}, receive chan string, conn io.ReadWriteCloser) {
 
-	var data []byte
-	var twoSeconds = time.Second * 2
-	var err error
-
-	for self.isRunning {
-
-		data = <-self.sendQueue
-		log.Print("[RAW"+strconv.Itoa(self.id)+"] -->", string(data))
-
-		_, err = self.socket.Write(data)
-		if err != nil {
-			self.isRunning = false
-			log.Println("Error writing to socket", err)
-			log.Println("Stopping chatbot. Monitor can restart it.")
-			self.Close()
-		}
-
-		// Rate limit to one message every 2 seconds
-		// https://github.com/lincolnloop/botbot-bot/issues/2
-		time.Sleep(twoSeconds)
-	}
-}
-
-// Listen for incoming messages. Parse them and put on channel.
-// Should run in go-routine
-func (self *ircBot) listen() {
-
-	var contentData []byte
-	var content string
-	var err error
-
-	bufRead := bufio.NewReader(self.socket)
-	for self.isRunning {
-		contentData, err = bufRead.ReadBytes('\n')
-
-		if err != nil {
-			netErr, ok := err.(net.Error)
-			if ok && netErr.Timeout() == true {
-				continue
-
-			} else if !self.isRunning {
-				// Close() wants us to stop
-				return
-
-			} else {
-				log.Println("Lost IRC server connection. ", err)
-				self.Close()
-				return
+	bufRead := bufio.NewReader(conn)
+	for {
+		select {
+		case <-quit:
+			return
+		default:
+			contentData, err := bufRead.ReadBytes('\n')
+			if err != nil {
+				netErr, ok := err.(net.Error)
+				if ok && netErr.Timeout() == true {
+					continue
+				} else {
+					glog.Errorln("An Error occured while reading from conn ", err)
+					return
+				}
 			}
+
+			if len(contentData) == 0 {
+				continue
+			}
+
+			content := toUnicode(contentData)
+			if glog.V(2) {
+				glog.Infoln("[RAW", bot, "] <--", content)
+			}
+			receive <- content
 		}
-
-		if len(contentData) == 0 {
-			continue
-		}
-
-		content = toUnicode(contentData)
-
-		log.Print("[RAW" + strconv.Itoa(self.id) + "]" + content)
-
-		theLine, err := parseLine(content)
-		if err == nil {
-			theLine.ChatBotId = self.id
-			self.act(theLine)
-		} else {
-			log.Println("Invalid line:", content)
-		}
-
 	}
 }
 
-func (self *ircBot) act(theLine *line.Line) {
+func (bot *ircBot) act(theLine *line.Line) {
+	// Notify the monitor goroutine that we receive a PONG
+	if theLine.Command == "PONG" {
+		if glog.V(2) {
+			glog.Infoln("Sending the signal in bot.pingResponse")
+		}
+		bot.pingResponse <- struct{}{}
+		return
+	}
 
-	// Send the command on the monitorChan
-	self.monitorChan <- theLine.Command
-
+	bot.RLock()
+	isConnecting := bot.isConnecting
+	bot.RUnlock()
 	// As soon as we receive a message from the server, complete initiatization
-	if self.isConnecting {
-		self.isConnecting = false
-		self.login()
+	if isConnecting {
+		bot.Lock()
+		bot.isConnecting = false
+		bot.Unlock()
+		bot.login()
 		return
 	}
 
 	// NickServ interactions
-
 	isNickServ := strings.Contains(theLine.User, "NickServ")
 
 	// freenode, coldfront
@@ -445,62 +606,77 @@ func (self *ircBot) act(theLine *line.Line) {
 	if isNickServ {
 
 		if isAskingForPW {
-			self.sendPassword()
+			bot.sendPassword()
 			return
 
 		} else if isConfirm {
-			self.isAuthenticating = false
-			self.JoinAll()
+			bot.Lock()
+			bot.isAuthenticating = false
+			bot.Unlock()
+			bot.JoinAll()
 			return
 		}
 	}
 
 	// After USER / NICK is accepted, join all the channels,
 	// assuming we don't need to identify with NickServ
-
-	if self.isAuthenticating && len(self.password) == 0 {
-		self.isAuthenticating = false
-		self.JoinAll()
+	bot.RLock()
+	shouldIdentify := bot.isAuthenticating && len(bot.password) == 0
+	bot.RUnlock()
+	if shouldIdentify {
+		bot.Lock()
+		bot.isAuthenticating = false
+		bot.Unlock()
+		bot.JoinAll()
 		return
 	}
 
 	if theLine.Command == "PING" {
 		// Reply, and send message on to client
-		self.SendRaw("PONG " + theLine.Content)
+		bot.SendRaw("PONG " + theLine.Content)
 	} else if theLine.Command == "VERSION" {
 		versionMsg := "NOTICE " + theLine.User + " :\u0001VERSION " + VERSION + "\u0001\n"
-		self.SendRaw(versionMsg)
+		bot.SendRaw(versionMsg)
+	} else if theLine.Command == RPL_WHOISCHANNELS {
+		glog.Infoln("[Info] reply_whoischannels -- len:",
+			len(strings.Split(theLine.Content, " ")), "content:", theLine.Content)
+		botStats := bot.GetStats()
+		botStats.Add("reply_whoischannels", int64(len(strings.Split(theLine.Content, " "))))
 	}
 
-	self.fromServer <- theLine
+	bot.fromServer <- theLine
 }
 
-func (self *ircBot) IsRunning() bool {
-	return self.isRunning
-}
-
-func (self *ircBot) Close() error {
-	self.sendShutdown()
-	self.isRunning = false
-	return self.socket.Close()
+// Close ircBot
+func (bot *ircBot) Close() (err error) {
+	// Send a signal to all goroutine to return
+	glog.Infoln("[Info] Closing bot.")
+	bot.sendShutdown()
+	close(bot.closing)
+	bot.Lock()
+	bot.isClosed = true
+	bot.Unlock()
+	return err
 }
 
 // Send a non-standard SHUTDOWN message to the plugins
 // This allows them to know that this channel is offline
-func (self *ircBot) sendShutdown() {
-
+func (bot *ircBot) sendShutdown() {
+	glog.Infoln("[Info] Logging Shutdown command in the channels monitored by:", bot)
+	bot.RLock()
 	shutLine := &line.Line{
 		Command:   "SHUTDOWN",
 		Received:  time.Now().UTC().Format(time.RFC3339Nano),
-		ChatBotId: self.id,
-		User:      self.nick,
+		ChatBotId: bot.id,
+		User:      bot.nick,
 		Raw:       "",
 		Content:   ""}
 
-	for _, channel := range self.channels {
-		shutLine.Channel = channel
-		self.fromServer <- shutLine
+	for _, channel := range bot.channels {
+		shutLine.Channel = channel.Credential()
+		bot.fromServer <- shutLine
 	}
+	bot.RUnlock()
 }
 
 /*
@@ -510,8 +686,7 @@ func (self *ircBot) sendShutdown() {
 // Split a string into sorted array of strings:
 // e.g. "#bob, #alice" becomes ["#alice", "#bob"]
 func splitChannels(rooms string) []string {
-
-	var channels []string = make([]string, 0)
+	var channels = make([]string, 0)
 	for _, s := range strings.Split(rooms, ",") {
 		channels = append(channels, strings.TrimSpace(s))
 	}
@@ -662,14 +837,36 @@ func toUnicode(data []byte) string {
 }
 
 // Are a and b equal?
-func isEqual(a, b []string) bool {
-	ja := strings.Join(a, ",")
-	jb := strings.Join(b, ",")
-	return bytes.Equal([]byte(ja), []byte(jb))
+func isEqual(a, b []*common.Channel) (flag bool) {
+	if len(a) == len(b) {
+		for _, aCc := range a {
+			flag = false
+			for _, bCc := range b {
+				if aCc.Fingerprint == bCc.Fingerprint {
+					flag = true
+					break
+				}
+			}
+			if flag == false {
+				return flag
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // Is a in b? container must be sorted
-func isIn(a string, container []string) bool {
-	index := sort.SearchStrings(container, a)
-	return index < len(container) && container[index] == a
+func isIn(a *common.Channel, channels []*common.Channel) (flag bool) {
+	flag = false
+	for _, cc := range channels {
+		if a.Fingerprint == cc.Fingerprint {
+			flag = true
+			break
+		}
+	}
+	if flag == false {
+		return flag
+	}
+	return true
 }

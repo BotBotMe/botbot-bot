@@ -1,13 +1,19 @@
-[![Build Status](https://travis-ci.org/lincolnloop/botbot-bot.png)](https://travis-ci.org/lincolnloop/botbot-bot)
+[![Build Status](https://travis-ci.org/BotBotMe/botbot-bot.png)](https://travis-ci.org/BotBotMe/botbot-bot)
 
-The bot used in botbot.me. To install:
+The bot used in botbot.me is a Go (1.2) program. To install:
 
-    go get github.com/lincolnloop/botbot-bot
+    go get github.com/BotBotMe/botbot-bot
 
 External resources:
 
 * A Postgres database with the schema as defined in `schema.sql`.
 * A Redis database used as a message bus between the plugins and the bot.
+
+Before loading the sample data from `botbot_sample.dump` you will need to update the script with the irc nick and password.
+Installing the database schema and loading sample data:
+
+    psql -U botbot -h localhost -W botbot -f schema.sql
+    psql -U botbot -h localhost -W botbot -f botbot_sample.dump
 
 Configuration is handled via environment variables:
 

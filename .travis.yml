@@ -1,9 +1,10 @@
 language: go
 
 go:
-  - 1.1
+  - 1.2
+  - tip
 
 install:
-  - go get github.com/lincolnloop/botbot-bot
+  - go get github.com/BotBotMe/botbot-bot
 
-script: go test github.com/lincolnloop/botbot-bot
+script: go test github.com/BotBotMe/botbot-bot/...
