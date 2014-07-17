@@ -207,6 +207,7 @@ func (bot *ircBot) listenSendMonitor(quit chan struct{}, receive chan string, co
 		case content := <-receive:
 			theLine, err := parseLine(content)
 			if err == nil {
+				theLine.BotNick = bot.nick
 				botStats.Add("received_messages", 1)
 				bot.RLock()
 				theLine.ChatBotId = bot.id

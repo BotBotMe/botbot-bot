@@ -24,6 +24,7 @@ type Line struct {
 	Content   string
 	IsCTCP    bool
 	Channel   string
+	BotNick   string
 }
 
 func (self *Line) String() string {
