@@ -22,6 +22,9 @@ type Queue interface {
 	// Append item to the end (right) of a list. Creates the list if needed.
 	Rpush(key string, val []byte) error
 
+	// Append item to the beginning (left) of a list. Creates the list if needed.
+	Lpush(key string, val []byte) error
+
 	// Blocking Pop from one or more Redis lists
 	Blpop(keys []string, timeoutsecs uint) (*string, []byte, error)
 
@@ -63,6 +66,14 @@ func (mq *MockQueue) Publish(queue string, message []byte) error {
 func (mq *MockQueue) Rpush(key string, val []byte) error {
 	mq.Lock()
 	defer mq.Unlock()
+	mq.Got[key] = append(mq.Got[key], string(val))
+	return nil
+}
+
+func (mq *MockQueue) Lpush(key string, val []byte) error {
+	mq.Lock()
+	defer mq.Unlock()
+	// TODO insert at the beginning of the slice
 	mq.Got[key] = append(mq.Got[key], string(val))
 	return nil
 }
@@ -173,6 +184,22 @@ func (self *RedisQueue) Rpush(key string, val []byte) error {
 
 	self.waitForRedis()
 	return self.Rpush(key, val) // Recurse
+}
+
+func (self *RedisQueue) Lpush(key string, val []byte) error {
+
+	err := self.queue.Lpush(key, val)
+	if err == nil {
+		return nil
+	}
+
+	netErr := err.(net.Error)
+	if netErr.Timeout() || netErr.Temporary() {
+		return err
+	}
+
+	self.waitForRedis()
+	return self.Lpush(key, val) // Recurse
 }
 
 func (self *RedisQueue) Llen(key string) (int, error) {

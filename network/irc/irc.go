@@ -705,14 +705,14 @@ func parseLine(data string) (*line.Line, error) {
 	data = sane(data)
 
 	if len(data) <= 2 {
-		return nil, line.ELSHORT
+		return nil, line.ErrLineShort
 	}
 
 	raw = data
 	if data[0] == ':' { // Do we have a prefix?
 		parts = strings.SplitN(data[1:], " ", 2)
 		if len(parts) != 2 {
-			return nil, line.ELMALFORMED
+			return nil, line.ErrLineMalformed
 		}
 
 		prefix = parts[0]
@@ -721,7 +721,7 @@ func parseLine(data string) (*line.Line, error) {
 		if strings.Contains(prefix, "!") {
 			parts = strings.Split(prefix, "!")
 			if len(parts) != 2 {
-				return nil, line.ELMALFORMED
+				return nil, line.ErrLineMalformed
 			}
 			user = parts[0]
 			host = parts[1]
@@ -734,7 +734,7 @@ func parseLine(data string) (*line.Line, error) {
 	if strings.Index(data, " :") != -1 {
 		parts = strings.SplitN(data, " :", 2)
 		if len(parts) != 2 {
-			return nil, line.ELMALFORMED
+			return nil, line.ErrLineMalformed
 		}
 		data = parts[0]
 		args = strings.Split(data, " ")
@@ -776,7 +776,7 @@ func parseLine(data string) (*line.Line, error) {
 		// Received a /me line
 		parts = strings.SplitN(trailing, " ", 2)
 		if len(parts) != 2 {
-			return nil, line.ELMALFORMED
+			return nil, line.ErrLineMalformed
 		}
 		trailing = parts[1]
 		command = "ACTION"

@@ -27,7 +27,7 @@ func NewDispatcher(queue common.Queue) *Dispatcher {
 func (self *Dispatcher) Dispatch(l *line.Line) {
 
 	var err error
-	err = self.queue.Rpush(QUEUE_PREFIX, l.AsJson())
+	err = self.queue.Rpush(QUEUE_PREFIX, l.JSON())
 	if err != nil {
 		glog.Fatal("Error writing (RPUSH) to queue. ", err)
 	}

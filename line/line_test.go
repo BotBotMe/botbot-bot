@@ -33,7 +33,7 @@ func TestCreateLine(t *testing.T) {
 func TestLineString(t *testing.T) {
 	srcLine := testLine()
 	var trgtLine Line
-	err := json.Unmarshal(srcLine.AsJson(), &trgtLine)
+	err := json.Unmarshal(srcLine.JSON(), &trgtLine)
 	if err != nil {
 		t.Error("Cannot Unmarshal a Line:", srcLine.String())
 	}
