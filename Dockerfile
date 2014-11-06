@@ -33,4 +33,4 @@ ADD . /go/src/$GOPACKAGE
 # either manually or with a tool like "godep".)
 RUN go get $GOPACKAGE
 
-ENTRYPOINT /go/bin/botbot-bot
+ENTRYPOINT /go/bin/botbot-bot -logtostderr=true
