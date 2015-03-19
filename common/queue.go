@@ -89,11 +89,11 @@ func (mq *MockQueue) Llen(key string) (int, error) {
 	return len(mq.Got), nil
 }
 
-func (self *MockQueue) Ltrim(key string, start int, end int) error {
+func (mq *MockQueue) Ltrim(key string, start int, end int) error {
 	return nil
 }
 
-func (self *MockQueue) Ping() (string, error) {
+func (mq *MockQueue) Ping() (string, error) {
 	return "PONG", nil
 }
 
@@ -122,25 +122,25 @@ func NewRedisQueue() Queue {
 	}
 
 	redisQueue := goredis.Client{Addr: redisUrl.Host, Db: redisDb}
-	s := RedisQueue{queue: &redisQueue}
-	s.waitForRedis()
-	return &s
+	rq := RedisQueue{queue: &redisQueue}
+	rq.waitForRedis()
+	return &rq
 }
 
-func (self *RedisQueue) waitForRedis() {
+func (rq *RedisQueue) waitForRedis() {
 
-	_, err := self.queue.Ping()
+	_, err := rq.queue.Ping()
 	for err != nil {
 		glog.Errorln("Waiting for redis...")
 		time.Sleep(1 * time.Second)
 
-		_, err = self.queue.Ping()
+		_, err = rq.queue.Ping()
 	}
 }
 
-func (self *RedisQueue) Publish(queue string, message []byte) error {
+func (rq *RedisQueue) Publish(queue string, message []byte) error {
 
-	err := self.queue.Publish(queue, message)
+	err := rq.queue.Publish(queue, message)
 	if err == nil {
 		return nil
 	}
@@ -150,13 +150,13 @@ func (self *RedisQueue) Publish(queue string, message []byte) error {
 		return err
 	}
 
-	self.waitForRedis()
-	return self.Publish(queue, message) // Recurse
+	rq.waitForRedis()
+	return rq.Publish(queue, message) // Recurse
 }
 
-func (self *RedisQueue) Blpop(keys []string, timeoutsecs uint) (*string, []byte, error) {
+func (rq *RedisQueue) Blpop(keys []string, timeoutsecs uint) (*string, []byte, error) {
 
-	key, val, err := self.queue.Blpop(keys, timeoutsecs)
+	key, val, err := rq.queue.Blpop(keys, timeoutsecs)
 	if err == nil {
 		return key, val, nil
 	}
@@ -166,13 +166,13 @@ func (self *RedisQueue) Blpop(keys []string, timeoutsecs uint) (*string, []byte,
 		return key, val, err
 	}
 
-	self.waitForRedis()
-	return self.Blpop(keys, timeoutsecs) // Recurse
+	rq.waitForRedis()
+	return rq.Blpop(keys, timeoutsecs) // Recurse
 }
 
-func (self *RedisQueue) Rpush(key string, val []byte) error {
+func (rq *RedisQueue) Rpush(key string, val []byte) error {
 
-	err := self.queue.Rpush(key, val)
+	err := rq.queue.Rpush(key, val)
 	if err == nil {
 		return nil
 	}
@@ -182,13 +182,13 @@ func (self *RedisQueue) Rpush(key string, val []byte) error {
 		return err
 	}
 
-	self.waitForRedis()
-	return self.Rpush(key, val) // Recurse
+	rq.waitForRedis()
+	return rq.Rpush(key, val) // Recurse
 }
 
-func (self *RedisQueue) Lpush(key string, val []byte) error {
+func (rq *RedisQueue) Lpush(key string, val []byte) error {
 
-	err := self.queue.Lpush(key, val)
+	err := rq.queue.Lpush(key, val)
 	if err == nil {
 		return nil
 	}
@@ -198,13 +198,13 @@ func (self *RedisQueue) Lpush(key string, val []byte) error {
 		return err
 	}
 
-	self.waitForRedis()
-	return self.Lpush(key, val) // Recurse
+	rq.waitForRedis()
+	return rq.Lpush(key, val) // Recurse
 }
 
-func (self *RedisQueue) Llen(key string) (int, error) {
+func (rq *RedisQueue) Llen(key string) (int, error) {
 
-	size, err := self.queue.Llen(key)
+	size, err := rq.queue.Llen(key)
 	if err == nil {
 		return size, nil
 	}
@@ -214,13 +214,13 @@ func (self *RedisQueue) Llen(key string) (int, error) {
 		return size, err
 	}
 
-	self.waitForRedis()
-	return self.Llen(key) // Recurse
+	rq.waitForRedis()
+	return rq.Llen(key) // Recurse
 }
 
-func (self *RedisQueue) Ltrim(key string, start int, end int) error {
+func (rq *RedisQueue) Ltrim(key string, start int, end int) error {
 
-	err := self.queue.Ltrim(key, start, end)
+	err := rq.queue.Ltrim(key, start, end)
 	if err == nil {
 		return nil
 	}
@@ -230,10 +230,10 @@ func (self *RedisQueue) Ltrim(key string, start int, end int) error {
 		return err
 	}
 
-	self.waitForRedis()
-	return self.Ltrim(key, start, end) // Recurse
+	rq.waitForRedis()
+	return rq.Ltrim(key, start, end) // Recurse
 }
 
-func (self *RedisQueue) Ping() (string, error) {
-	return self.queue.Ping()
+func (rq *RedisQueue) Ping() (string, error) {
+	return rq.queue.Ping()
 }

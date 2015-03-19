@@ -37,11 +37,11 @@ func NewMockStorage(serverPort string) Storage {
 	return &MockStorage{botConfs: []*BotConfig{botConf}}
 }
 
-func (self *MockStorage) BotConfig() []*BotConfig {
-	return self.botConfs
+func (ms *MockStorage) BotConfig() []*BotConfig {
+	return ms.botConfs
 }
 
-func (self *MockStorage) SetCount(channel string, count int) error {
+func (ms *MockStorage) SetCount(channel string, count int) error {
 	return nil
 }
 
@@ -80,7 +80,7 @@ func NewPostgresStorage() *PostgresStorage {
 	return &PostgresStorage{db}
 }
 
-func (self *PostgresStorage) BotConfig() []*BotConfig {
+func (ms *PostgresStorage) BotConfig() []*BotConfig {
 
 	var err error
 	var rows *sql.Rows
@@ -88,7 +88,7 @@ func (self *PostgresStorage) BotConfig() []*BotConfig {
 	configs := make([]*BotConfig, 0)
 
 	sql := "SELECT id, server, server_password, nick, password, real_name, server_identifier FROM bots_chatbot WHERE is_active=true"
-	rows, err = self.db.Query(sql)
+	rows, err = ms.db.Query(sql)
 	if err != nil {
 		glog.Fatal("Error running: ", sql, " ", err)
 	}
@@ -120,7 +120,7 @@ func (self *PostgresStorage) BotConfig() []*BotConfig {
 		configs = append(configs, config)
 		glog.Infoln("config.Id:", config.Id)
 	}
-	channelStmt, err := self.db.Prepare("SELECT id, name, password, fingerprint FROM bots_channel WHERE is_active=true and chatbot_id=$1")
+	channelStmt, err := ms.db.Prepare("SELECT id, name, password, fingerprint FROM bots_channel WHERE is_active=true and chatbot_id=$1")
 	if err != nil {
 		glog.Fatal("[Error] Error while preparing the statements to retrieve the channel:", err)
 	}
@@ -148,12 +148,12 @@ func (self *PostgresStorage) BotConfig() []*BotConfig {
 	return configs
 }
 
-func (self *PostgresStorage) SetCount(channel string, count int) error {
+func (ms *PostgresStorage) SetCount(channel string, count int) error {
 
 	now := time.Now()
 	hour := now.Hour()
 
-	channelId, err := self.channelId(channel)
+	channelId, err := ms.channelId(channel)
 	if err != nil {
 		return err
 	}
@@ -163,7 +163,7 @@ func (self *PostgresStorage) SetCount(channel string, count int) error {
 	updateSQL := "UPDATE bots_usercount SET counts[$1] = $2 WHERE channel_id = $3 AND dt = $4"
 
 	var res sql.Result
-	res, err = self.db.Exec(updateSQL, hour, count, channelId, now)
+	res, err = ms.db.Exec(updateSQL, hour, count, channelId, now)
 	if err != nil {
 		return err
 	}
@@ -183,13 +183,13 @@ func (self *PostgresStorage) SetCount(channel string, count int) error {
 
 	insSQL := "INSERT INTO bots_usercount (channel_id, dt, counts) VALUES ($1, $2, '{NULL}')"
 
-	_, err = self.db.Exec(insSQL, channelId, now)
+	_, err = ms.db.Exec(insSQL, channelId, now)
 	if err != nil {
 		return err
 	}
 
 	// Run the update again
-	_, err = self.db.Query(updateSQL, hour, count, channelId, now)
+	_, err = ms.db.Query(updateSQL, hour, count, channelId, now)
 	if err != nil {
 		return err
 	}
@@ -198,12 +198,12 @@ func (self *PostgresStorage) SetCount(channel string, count int) error {
 }
 
 // The channel Id for a given channel name
-func (self *PostgresStorage) channelId(name string) (int, error) {
+func (ms *PostgresStorage) channelId(name string) (int, error) {
 
 	var channelId int
 	query := "SELECT id from bots_channel WHERE name = $1"
 
-	rows, err := self.db.Query(query, name)
+	rows, err := ms.db.Query(query, name)
 	if err != nil {
 		return -1, err
 	}
@@ -220,6 +220,6 @@ func (self *PostgresStorage) channelId(name string) (int, error) {
 	return channelId, nil
 }
 
-func (self *PostgresStorage) Close() error {
-	return self.db.Close()
+func (ms *PostgresStorage) Close() error {
+	return ms.db.Close()
 }
