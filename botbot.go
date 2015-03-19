@@ -161,7 +161,7 @@ func (bot *BotBot) recordUserCounts() {
 
 	for {
 
-		for ch, _ := range bot.users.Channels() {
+		for ch := range bot.users.Channels() {
 			bot.storage.SetCount(ch, bot.users.Count(ch))
 		}
 		time.Sleep(1 * time.Hour)
