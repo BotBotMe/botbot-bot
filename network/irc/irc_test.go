@@ -176,7 +176,7 @@ func TestFlood(t *testing.T) {
 		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
 		sendQueue:        make(chan []byte, 256),
 	}
-	chatbot.init(mockSocket)
+	chatbot.init(&mockSocket)
 
 	startTime := time.Now()
 
@@ -224,7 +224,7 @@ func TestUpdate(t *testing.T) {
 		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
 		sendQueue:        make(chan []byte, 256),
 	}
-	chatbot.init(mockSocket)
+	chatbot.init(&mockSocket)
 	conf := map[string]string{
 		"nick": "test", "password": "testxyz", "server": "localhost"}
 	channels = append(channels, &NEW_CHANNEL)

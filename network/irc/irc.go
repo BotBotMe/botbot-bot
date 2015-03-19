@@ -40,7 +40,7 @@ type chatBotStats struct {
 	m map[string]*expvar.Map
 }
 
-func (s chatBotStats) GetOrCreate(identifier string) (*expvar.Map, bool) {
+func (s *chatBotStats) GetOrCreate(identifier string) (*expvar.Map, bool) {
 	s.RLock()
 	chatbotStats, ok := s.m[identifier]
 	s.RUnlock()
