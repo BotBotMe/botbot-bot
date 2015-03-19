@@ -52,13 +52,13 @@ func NewBotBot(storage common.Storage, queue common.Queue) *BotBot {
 }
 
 // Listen for incoming commands
-func (self *BotBot) listen(queueName string) {
+func (bot *BotBot) listen(queueName string) {
 
 	var msg []byte
 	var err error
 
 	for {
-		_, msg, err = self.queue.Blpop([]string{queueName}, 0)
+		_, msg, err = bot.queue.Blpop([]string{queueName}, 0)
 		if err != nil {
 			glog.Fatal("Error reading (BLPOP) from queue. ", err)
 		}
@@ -66,21 +66,21 @@ func (self *BotBot) listen(queueName string) {
 			if glog.V(1) {
 				glog.Infoln("Command: ", string(msg))
 			}
-			self.fromBus <- string(msg)
+			bot.fromBus <- string(msg)
 		}
 	}
 }
 
-func (self *BotBot) mainLoop() {
-	// TODO (yml) comment out self.recordUserCounts because I think it is
+func (bot *BotBot) mainLoop() {
+	// TODO (yml) comment out bot.recordUserCounts because I think it is
 	// leaking postgres connection.
-	//go self.recordUserCounts()
+	//go bot.recordUserCounts()
 
 	var busCommand string
 	var args string
 	for {
 		select {
-		case serverLine, ok := <-self.fromServer:
+		case serverLine, ok := <-bot.fromServer:
 			if !ok {
 				// Channel is closed, we're offline. Stop.
 				break
@@ -91,15 +91,15 @@ func (self *BotBot) mainLoop() {
 			// QUIT and NICK don't have a channel name
 			// They need to go to all channels the user is in
 			case "QUIT", "NICK":
-				self.dis.DispatchMany(serverLine, self.users.In(serverLine.User))
+				bot.dis.DispatchMany(serverLine, bot.users.In(serverLine.User))
 
 			default:
-				self.dis.Dispatch(serverLine)
+				bot.dis.Dispatch(serverLine)
 			}
 
-			self.users.Act(serverLine)
+			bot.users.Act(serverLine)
 
-		case busMessage, ok := <-self.fromBus:
+		case busMessage, ok := <-bot.fromBus:
 			if !ok {
 				break
 			}
@@ -110,7 +110,7 @@ func (self *BotBot) mainLoop() {
 				args = parts[1]
 			}
 
-			self.handleCommand(busCommand, args)
+			bot.handleCommand(busCommand, args)
 		}
 	}
 }
@@ -119,7 +119,7 @@ func (self *BotBot) mainLoop() {
 // Current commands:
 //  - WRITE <chatbotid> <channel> <msg>: Send message to server
 //  - REFRESH: Reload plugin configuration
-func (self *BotBot) handleCommand(cmd string, args string) {
+func (bot *BotBot) handleCommand(cmd string, args string) {
 	if glog.V(2) {
 		glog.Infoln("HandleCommand:", cmd)
 	}
@@ -134,41 +134,41 @@ func (self *BotBot) handleCommand(cmd string, args string) {
 			return
 		}
 
-		self.netMan.Send(chatbotId, parts[1], parts[2])
+		bot.netMan.Send(chatbotId, parts[1], parts[2])
 
 		// Now send it back to ourself, so other plugins see it
 		internalLine := &line.Line{
 			ChatBotId: chatbotId,
 			Raw:       args,
-			User:      self.netMan.GetUserByChatbotId(chatbotId),
+			User:      bot.netMan.GetUserByChatbotId(chatbotId),
 			Command:   "PRIVMSG",
 			Received:  time.Now().UTC().Format(time.RFC3339Nano),
 			Content:   parts[2],
 			Channel:   strings.TrimSpace(parts[1])}
 
-		self.dis.Dispatch(internalLine)
+		bot.dis.Dispatch(internalLine)
 
 	case "REFRESH":
 		if glog.V(1) {
 			glog.Infoln("Reloading configuration from database")
 		}
-		self.netMan.RefreshChatbots()
+		bot.netMan.RefreshChatbots()
 	}
 }
 
 // Writes the number of users per channel, every hour. Run in go routine.
-func (self *BotBot) recordUserCounts() {
+func (bot *BotBot) recordUserCounts() {
 
 	for {
 
-		for ch, _ := range self.users.Channels() {
-			self.storage.SetCount(ch, self.users.Count(ch))
+		for ch, _ := range bot.users.Channels() {
+			bot.storage.SetCount(ch, bot.users.Count(ch))
 		}
 		time.Sleep(1 * time.Hour)
 	}
 }
 
 // Stop
-func (self *BotBot) shutdown() {
-	self.netMan.Shutdown()
+func (bot *BotBot) shutdown() {
+	bot.netMan.Shutdown()
 }
