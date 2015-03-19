@@ -26,7 +26,7 @@ type MockSocket struct {
 	Receiver chan string
 }
 
-func (sock MockSocket) Write(data []byte) (int, error) {
+func (sock *MockSocket) Write(data []byte) (int, error) {
 	glog.V(3).Infoln("[Debug]: Starting MockSocket.Write of:", string(data))
 	if sock.Counter != nil {
 		sock.Counter <- true
@@ -38,14 +38,14 @@ func (sock MockSocket) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
-func (sock MockSocket) Read(into []byte) (int, error) {
+func (sock *MockSocket) Read(into []byte) (int, error) {
 	sock.RLock()
 	defer sock.RUnlock()
 	time.Sleep(time.Second) // Prevent busy loop
 	return 0, nil
 }
 
-func (sock MockSocket) Close() error {
+func (sock *MockSocket) Close() error {
 	if sock.Receiver != nil {
 		close(sock.Receiver)
 	}
