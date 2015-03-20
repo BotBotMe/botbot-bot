@@ -24,20 +24,20 @@ func NewDispatcher(queue common.Queue) *Dispatcher {
 }
 
 // Main method - send the line to relevant plugins
-func (self *Dispatcher) Dispatch(l *line.Line) {
+func (dis *Dispatcher) Dispatch(l *line.Line) {
 
 	var err error
-	err = self.queue.Rpush(QUEUE_PREFIX, l.JSON())
+	err = dis.queue.Rpush(QUEUE_PREFIX, l.JSON())
 	if err != nil {
 		glog.Fatal("Error writing (RPUSH) to queue. ", err)
 	}
-	self.limitQueue(QUEUE_PREFIX)
+	dis.limitQueue(QUEUE_PREFIX)
 }
 
 // Ensure the redis queue doesn't exceed a certain size
-func (self *Dispatcher) limitQueue(key string) {
+func (dis *Dispatcher) limitQueue(key string) {
 
-	size, err := self.queue.Llen(key)
+	size, err := dis.queue.Llen(key)
 	if err != nil {
 		glog.Fatal("Error LLEN on queue. ", err)
 	}
@@ -46,7 +46,7 @@ func (self *Dispatcher) limitQueue(key string) {
 		return
 	}
 
-	err = self.queue.Ltrim(key, 0, MAX_QUEUE_SIZE)
+	err = dis.queue.Ltrim(key, 0, MAX_QUEUE_SIZE)
 	if err != nil {
 		glog.Fatal("Error LTRIM on queue. ", err)
 	}
@@ -55,10 +55,10 @@ func (self *Dispatcher) limitQueue(key string) {
 // Dispatch the line to several channels.
 // We need this for QUIT for example, which goes to all channels
 // that user was in.
-func (self *Dispatcher) DispatchMany(l *line.Line, channels []string) {
+func (dis *Dispatcher) DispatchMany(l *line.Line, channels []string) {
 
 	for _, chName := range channels {
 		l.Channel = chName
-		self.Dispatch(l)
+		dis.Dispatch(l)
 	}
 }
