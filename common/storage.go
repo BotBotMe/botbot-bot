@@ -80,7 +80,7 @@ func NewPostgresStorage() *PostgresStorage {
 	return &PostgresStorage{db}
 }
 
-func (ms *PostgresStorage) BotConfig() []*BotConfig {
+func (ps *PostgresStorage) BotConfig() []*BotConfig {
 
 	var err error
 	var rows *sql.Rows
@@ -88,7 +88,7 @@ func (ms *PostgresStorage) BotConfig() []*BotConfig {
 	configs := make([]*BotConfig, 0)
 
 	sql := "SELECT id, server, server_password, nick, password, real_name, server_identifier FROM bots_chatbot WHERE is_active=true"
-	rows, err = ms.db.Query(sql)
+	rows, err = ps.db.Query(sql)
 	if err != nil {
 		glog.Fatal("Error running: ", sql, " ", err)
 	}
@@ -120,7 +120,7 @@ func (ms *PostgresStorage) BotConfig() []*BotConfig {
 		configs = append(configs, config)
 		glog.Infoln("config.Id:", config.Id)
 	}
-	channelStmt, err := ms.db.Prepare("SELECT id, name, password, fingerprint FROM bots_channel WHERE is_active=true and chatbot_id=$1")
+	channelStmt, err := ps.db.Prepare("SELECT id, name, password, fingerprint FROM bots_channel WHERE is_active=true and chatbot_id=$1")
 	if err != nil {
 		glog.Fatal("[Error] Error while preparing the statements to retrieve the channel:", err)
 	}
@@ -159,7 +159,6 @@ func (ms *PostgresStorage) SetCount(channel string, count int) error {
 	}
 
 	// Write the count
-
 	updateSQL := "UPDATE bots_usercount SET counts[$1] = $2 WHERE channel_id = $3 AND dt = $4"
 
 	var res sql.Result
