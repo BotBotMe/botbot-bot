@@ -120,7 +120,7 @@ func (ps *PostgresStorage) BotConfig() []*BotConfig {
 		configs = append(configs, config)
 		glog.Infoln("config.Id:", config.Id)
 	}
-	channelStmt, err := ps.db.Prepare("SELECT id, name, password, fingerprint FROM bots_channel WHERE is_active=true and chatbot_id=$1")
+	channelStmt, err := ps.db.Prepare("SELECT id, name, password, fingerprint FROM bots_channel WHERE status=$1 and chatbot_id=$2")
 	if err != nil {
 		glog.Fatal("[Error] Error while preparing the statements to retrieve the channel:", err)
 	}
@@ -128,7 +128,7 @@ func (ps *PostgresStorage) BotConfig() []*BotConfig {
 
 	for i := range configs {
 		config := configs[i]
-		rows, err = channelStmt.Query(config.Id)
+		rows, err = channelStmt.Query("ACTIVE", config.Id)
 		if err != nil {
 			glog.Fatal("Error running:", err)
 		}
