@@ -108,7 +108,7 @@ func NewBot(config *common.BotConfig, fromServer chan *line.Line) common.ChatBot
 	// Initialize the counter for the exported variable
 	if !ok {
 		chatbotStats.Add("channels", 0)
-		chatbotStats.Add("messages", 0)
+		chatbotStats.Add("sent_messages", 0)
 		chatbotStats.Add("received_messages", 0)
 		chatbotStats.Add("ping", 0)
 		chatbotStats.Add("pong", 0)
@@ -233,7 +233,7 @@ func (bot *ircBot) listenSendMonitor(quit chan struct{}, receive chan string, co
 				glog.Errorln("Error writing to conn to", bot, ": ", err)
 				close(reconnect)
 			}
-			botStats.Add("messages", 1)
+			botStats.Add("sent_messages", 1)
 			time.Sleep(bot.rateLimit)
 
 		}
@@ -495,6 +495,8 @@ func (bot *ircBot) Whois() {
 // Join an IRC channel
 func (bot *ircBot) join(channel string) {
 	bot.SendRaw("JOIN " + channel)
+	botStats := bot.GetStats()
+	botStats.Add("channels", 1)
 }
 
 // Leave an IRC channel
@@ -642,7 +644,9 @@ func (bot *ircBot) act(theLine *line.Line) {
 		glog.Infoln("[Info] reply_whoischannels -- len:",
 			len(strings.Split(theLine.Content, " ")), "content:", theLine.Content)
 		botStats := bot.GetStats()
-		botStats.Add("reply_whoischannels", int64(len(strings.Split(theLine.Content, " "))))
+		varInt := new(expvar.Int)
+		varInt.Set(int64(len(strings.Split(theLine.Content, " "))))
+		botStats.Set("reply_whoischannels", varInt)
 	}
 
 	bot.fromServer <- theLine
@@ -657,6 +661,10 @@ func (bot *ircBot) Close() (err error) {
 	bot.Lock()
 	bot.isClosed = true
 	bot.Unlock()
+	botStats := bot.GetStats()
+	// zero out gauges
+	botStats.Set("channels", new(expvar.Int))
+	botStats.Set("reply_whoischannels", new(expvar.Int))
 	return err
 }
 
