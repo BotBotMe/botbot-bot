@@ -1,10 +1,14 @@
 language: go
+sudo: false
 
 go:
   - 1.2
+  - 1.3
+  - 1.4
+  - 1.5
   - tip
 
 install:
   - go get github.com/BotBotMe/botbot-bot
 
-script: go test github.com/BotBotMe/botbot-bot/...
+script: go test -v github.com/BotBotMe/botbot-bot/...

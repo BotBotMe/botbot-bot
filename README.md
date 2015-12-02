@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.org/BotBotMe/botbot-bot.png)](https://travis-ci.org/BotBotMe/botbot-bot)
 
-The bot used in botbot.me is a Go (1.2) program. To install:
+The bot used in botbot.me is a Go (1.2+) program. To install:
 
     go get github.com/BotBotMe/botbot-bot
 
