@@ -489,6 +489,9 @@ func (bot *ircBot) JoinAll() {
 
 // Whois is used to query information about the bot
 func (bot *ircBot) Whois() {
+	// reset channel count so we can add them up from the response
+	botStats := bot.GetStats()
+	botStats.Set("reply_whoischannels", new(expvar.Int))
 	bot.SendRaw("WHOIS " + bot.nick)
 }
 
@@ -644,9 +647,7 @@ func (bot *ircBot) act(theLine *line.Line) {
 		glog.Infoln("[Info] reply_whoischannels -- len:",
 			len(strings.Split(theLine.Content, " ")), "content:", theLine.Content)
 		botStats := bot.GetStats()
-		varInt := new(expvar.Int)
-		varInt.Set(int64(len(strings.Split(theLine.Content, " "))))
-		botStats.Set("reply_whoischannels", varInt)
+		botStats.Add("reply_whoischannels", int64(len(strings.Split(theLine.Content, " "))))
 	}
 
 	bot.fromServer <- theLine
