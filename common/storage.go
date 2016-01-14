@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/bmizerany/pq"
 	"github.com/golang/glog"
+	"github.com/lib/pq"
 )
 
 // Storage. Wraps the database
@@ -30,8 +30,8 @@ func NewMockStorage(serverPort string) Storage {
 		"nick":     "test",
 		"password": "testxyz",
 		"server":   "127.0.0.1:" + serverPort}
-	channels := make([]string, 0)
-	channels = append(channels, "#unit")
+	channels := make([]*Channel, 0)
+	channels = append(channels, &Channel{Id: 1, Name: "#unit", Fingerprint: "5876HKJGYUT"})
 	botConf := &BotConfig{Id: 1, Config: conf, Channels: channels}
 
 	return &MockStorage{botConfs: []*BotConfig{botConf}}
@@ -66,10 +66,16 @@ func NewPostgresStorage() *PostgresStorage {
 	if err != nil {
 		glog.Fatal("Could not read database string", err)
 	}
-	db, err := sql.Open("postgres", dataSource+" sslmode=disable")
+	db, err := sql.Open("postgres", dataSource+" sslmode=disable fallback_application_name=bot")
 	if err != nil {
 		glog.Fatal("Could not connect to database.", err)
 	}
+
+	// The following 2 lines mitigate the leak of postgresql connection leak
+	// explicitly setting a maximum number of postgresql connections
+	db.SetMaxOpenConns(10)
+	// explicitly setting a maximum number of Idle postgresql connections
+	db.SetMaxIdleConns(2)
 
 	return &PostgresStorage{db}
 }
@@ -81,46 +87,60 @@ func (self *PostgresStorage) BotConfig() []*BotConfig {
 
 	configs := make([]*BotConfig, 0)
 
-	sql := "SELECT id, server, server_password, nick, password, real_name FROM bots_chatbot WHERE is_active=true"
+	sql := "SELECT id, server, server_password, nick, password, real_name, server_identifier FROM bots_chatbot WHERE is_active=true"
 	rows, err = self.db.Query(sql)
 	if err != nil {
 		glog.Fatal("Error running: ", sql, " ", err)
 	}
+	defer rows.Close()
 
 	var chatbotId int
-	var server, server_password, nick, password, real_name []byte
+	var server, server_password, nick, password, real_name, server_identifier []byte
 
 	for rows.Next() {
-		rows.Scan(&chatbotId, &server, &server_password, &nick, &password, &real_name)
+		rows.Scan(
+			&chatbotId, &server, &server_password, &nick, &password,
+			&real_name, &server_identifier)
 
 		confMap := map[string]string{
-			"server":          string(server),
-			"server_password": string(server_password),
-			"nick":            string(nick),
-			"password":        string(password),
-			"realname":        string(real_name),
+			"server":            string(server),
+			"server_password":   string(server_password),
+			"nick":              string(nick),
+			"password":          string(password),
+			"realname":          string(real_name),
+			"server_identifier": string(server_identifier),
 		}
 
 		config := &BotConfig{
 			Id:       chatbotId,
 			Config:   confMap,
-			Channels: make([]string, 0),
+			Channels: make([]*Channel, 0),
 		}
 
 		configs = append(configs, config)
+		glog.Infoln("config.Id:", config.Id)
 	}
+	channelStmt, err := self.db.Prepare("SELECT id, name, password, fingerprint FROM bots_channel WHERE is_active=true and chatbot_id=$1")
+	if err != nil {
+		glog.Fatal("[Error] Error while preparing the statements to retrieve the channel:", err)
+	}
+	defer channelStmt.Close()
+
 	for i := range configs {
 		config := configs[i]
-		rows, err = self.db.Query("SELECT id, name, password FROM bots_channel WHERE is_active=true and chatbot_id=$1", config.Id)
+		rows, err = channelStmt.Query(config.Id)
 		if err != nil {
 			glog.Fatal("Error running:", err)
 		}
+		defer rows.Close()
+
 		var channelId int
-		var channelName string
-		var channelPwd string
+		var channelName, channelPwd, channelFingerprint string
 		for rows.Next() {
-			rows.Scan(&channelId, &channelName, &channelPwd)
-			config.Channels = append(config.Channels, channelName+" "+channelPwd)
+			rows.Scan(&channelId, &channelName, &channelPwd, &channelFingerprint)
+			config.Channels = append(config.Channels,
+				&Channel{Id: channelId, Name: channelName,
+					Pwd: channelPwd, Fingerprint: channelFingerprint})
 		}
 		glog.Infoln("config.Channel:", config.Channels)
 	}
@@ -187,6 +207,7 @@ func (self *PostgresStorage) channelId(name string) (int, error) {
 	if err != nil {
 		return -1, err
 	}
+	defer rows.Close()
 
 	rows.Next()
 	rows.Scan(&channelId)

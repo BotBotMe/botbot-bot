@@ -4,6 +4,9 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang/glog"
@@ -38,6 +41,7 @@ type Queue interface {
 
 // Simplistic Queue implementation used by the test suite
 type MockQueue struct {
+	sync.RWMutex
 	Got         map[string][]string
 	ReadChannel chan string
 }
@@ -49,23 +53,29 @@ func NewMockQueue() *MockQueue {
 	}
 }
 
-func (self *MockQueue) Publish(queue string, message []byte) error {
-	self.Got[queue] = append(self.Got[queue], string(message))
+func (mq *MockQueue) Publish(queue string, message []byte) error {
+	mq.Lock()
+	defer mq.Unlock()
+	mq.Got[queue] = append(mq.Got[queue], string(message))
 	return nil
 }
 
-func (self *MockQueue) Rpush(key string, val []byte) error {
-	self.Got[key] = append(self.Got[key], string(val))
+func (mq *MockQueue) Rpush(key string, val []byte) error {
+	mq.Lock()
+	defer mq.Unlock()
+	mq.Got[key] = append(mq.Got[key], string(val))
 	return nil
 }
 
-func (self *MockQueue) Blpop(keys []string, timeoutsecs uint) (*string, []byte, error) {
-	val := <-self.ReadChannel
+func (mq *MockQueue) Blpop(keys []string, timeoutsecs uint) (*string, []byte, error) {
+	val := <-mq.ReadChannel
 	return &keys[0], []byte(val), nil
 }
 
-func (self *MockQueue) Llen(key string) (int, error) {
-	return len(self.Got), nil
+func (mq *MockQueue) Llen(key string) (int, error) {
+	mq.RLock()
+	defer mq.RUnlock()
+	return len(mq.Got), nil
 }
 
 func (self *MockQueue) Ltrim(key string, start int, end int) error {
@@ -86,15 +96,21 @@ type RedisQueue struct {
 }
 
 func NewRedisQueue() Queue {
-	redisUrlString := os.Getenv("QUEUE_URL")
+	redisUrlString := os.Getenv("REDIS_PLUGIN_QUEUE_URL")
 	if redisUrlString == "" {
-		glog.Fatal("QUEUE_URL cannot be empty.\nexport QUEUE_URL=redis://host:port/db_number")
+		glog.Fatal("REDIS_PLUGIN_QUEUE_URL cannot be empty.\nexport REDIS_PLUGIN_QUEUE_URL=redis://host:port/db_number")
 	}
 	redisUrl, err := url.Parse(redisUrlString)
 	if err != nil {
 		glog.Fatal("Could not read Redis string", err)
 	}
-	redisQueue := goredis.Client{Addr: redisUrl.Host}
+
+	redisDb, err := strconv.Atoi(strings.TrimLeft(redisUrl.Path, "/"))
+	if err != nil {
+		glog.Fatal("Could not read Redis path", err)
+	}
+
+	redisQueue := goredis.Client{Addr: redisUrl.Host, Db: redisDb}
 	s := RedisQueue{queue: &redisQueue}
 	s.waitForRedis()
 	return &s

@@ -8,13 +8,15 @@ import (
 
 	"github.com/BotBotMe/botbot-bot/common"
 	"github.com/BotBotMe/botbot-bot/line"
+	"github.com/golang/glog"
 )
 
-const (
-	NEW_CHANNEL = "#unitnew"
+var (
+	NEW_CHANNEL = common.Channel{Name: "#unitnew", Fingerprint: "new-channel-uuid"}
 )
 
 func TestParseLine_welcome(t *testing.T) {
+	common.SetGlogFlags()
 
 	line1 := ":barjavel.freenode.net 001 graham_king :Welcome to the freenode Internet Relay Chat Network graham_king"
 	line, err := parseLine(line1)
@@ -32,6 +34,7 @@ func TestParseLine_welcome(t *testing.T) {
 }
 
 func TestParseLine_privmsg(t *testing.T) {
+	common.SetGlogFlags()
 	line1 := ":rnowak!~rnowak@q.ovron.com PRIVMSG #linode :totally"
 	line, err := parseLine(line1)
 
@@ -57,6 +60,7 @@ func TestParseLine_privmsg(t *testing.T) {
 }
 
 func TestParseLine_pm(t *testing.T) {
+	common.SetGlogFlags()
 
 	line1 := ":graham_king!graham_kin@i.love.debian.org PRIVMSG botbotme :hello"
 	line, err := parseLine(line1)
@@ -77,6 +81,7 @@ func TestParseLine_pm(t *testing.T) {
 }
 
 func TestParseLine_list(t *testing.T) {
+	common.SetGlogFlags()
 	line1 := ":oxygen.oftc.net 322 graham_king #linode 412 :Linode Community Support | http://www.linode.com/ | Linodes in Asia-Pacific! - http://bit.ly/ooBzhV"
 	line, err := parseLine(line1)
 
@@ -102,6 +107,7 @@ func TestParseLine_list(t *testing.T) {
 }
 
 func TestParseLine_quit(t *testing.T) {
+	common.SetGlogFlags()
 	line1 := ":nicolaslara!~nicolasla@c83-250-0-151.bredband.comhem.se QUIT :"
 	line, err := parseLine(line1)
 	if err != nil {
@@ -113,6 +119,7 @@ func TestParseLine_quit(t *testing.T) {
 }
 
 func TestParseLine_part(t *testing.T) {
+	common.SetGlogFlags()
 	line1 := ":nicolaslara!~nicolasla@c83-250-0-151.bredband.comhem.se PART #lincolnloop-internal"
 	line, err := parseLine(line1)
 	if err != nil {
@@ -127,6 +134,7 @@ func TestParseLine_part(t *testing.T) {
 }
 
 func TestParseLine_353(t *testing.T) {
+	common.SetGlogFlags()
 	line1 := ":hybrid7.debian.local 353 botbot = #test :@botbot graham_king"
 	line, err := parseLine(line1)
 	if err != nil {
@@ -143,50 +151,32 @@ func TestParseLine_353(t *testing.T) {
 	}
 }
 
-// Dummy implementation of ReadWriteCloser
-type MockSocket struct {
-	received []string
-	counter  chan bool
-}
-
-func (self *MockSocket) Write(data []byte) (int, error) {
-	self.received = append(self.received, string(data))
-	if self.counter != nil {
-		self.counter <- true
-	}
-	return len(data), nil
-}
-
-func (self *MockSocket) Read(into []byte) (int, error) {
-	time.Sleep(time.Second) // Prevent busy loop
-	return 0, nil
-}
-
-func (self *MockSocket) Close() error {
-	return nil
-}
-
 // Test sending messages too fast
 func TestFlood(t *testing.T) {
+	common.SetGlogFlags()
 
 	NUM := 5
 
 	fromServer := make(chan *line.Line)
 	receivedCounter := make(chan bool)
-	mockSocket := MockSocket{counter: receivedCounter}
+	mockSocket := common.MockSocket{Counter: receivedCounter}
+	channels := make([]*common.Channel, 1)
+	channels = append(channels, &common.Channel{Name: "test", Fingerprint: "uuid-string"})
 
 	chatbot := &ircBot{
-		id:         99,
-		address:    "localhost",
-		nick:       "test",
-		realname:   "Unit Test",
-		password:   "test",
-		fromServer: fromServer,
-		channels:   []string{"test"},
-		socket:     &mockSocket,
-		isRunning:  true,
+		id:               99,
+		address:          "fakehost",
+		nick:             "test",
+		realname:         "Unit Test",
+		password:         "test",
+		serverIdentifier: "localhost.test",
+		rateLimit:        time.Second,
+		fromServer:       fromServer,
+		channels:         channels,
+		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
+		sendQueue:        make(chan []byte, 256),
 	}
-	chatbot.init()
+	chatbot.init(mockSocket)
 
 	startTime := time.Now()
 
@@ -196,14 +186,13 @@ func TestFlood(t *testing.T) {
 	}
 
 	// Wait for them to 'arrive' at the socket
-	for numGot := 0; numGot < NUM; numGot++ {
+	for numGot := 0; numGot <= NUM; numGot++ {
 		<-receivedCounter
 	}
 
 	elapsed := int64(time.Since(startTime))
 
-	// NUM messages should take at least ((NUM-1) / 4) seconds (max 4 msgs second)
-	expected := int64((NUM-1)/4) * int64(time.Second)
+	expected := int64((NUM-1)/4) * int64(chatbot.rateLimit)
 	if elapsed < expected {
 		t.Error("Flood prevention did not work")
 	}
@@ -212,62 +201,56 @@ func TestFlood(t *testing.T) {
 
 // Test joining additional channels
 func TestUpdate(t *testing.T) {
+	common.SetGlogFlags()
+	glog.Infoln("[DEBUG] starting TestUpdate")
 
 	fromServer := make(chan *line.Line)
-	mockSocket := MockSocket{counter: nil}
+	receiver := make(chan string, 10)
+	mockSocket := common.MockSocket{Receiver: receiver}
+	channels := make([]*common.Channel, 0, 2)
+	channel := common.Channel{Name: "#test", Fingerprint: "uuid-string"}
+	channels = append(channels, &channel)
 
 	chatbot := &ircBot{
-		id:         99,
-		address:    "localhost",
-		nick:       "test",
-		realname:   "Unit Test",
-		password:   "test",
-		fromServer: fromServer,
-		channels:   []string{"#test"},
-		socket:     &mockSocket,
-		sendQueue:  make(chan []byte, 100),
-		isRunning:  true,
+		id:               99,
+		address:          "localhost",
+		nick:             "test",
+		realname:         "Unit Test",
+		password:         "test",
+		serverIdentifier: "localhost.test1",
+		fromServer:       fromServer,
+		channels:         channels,
+		rateLimit:        time.Second,
+		pingResponse:     make(chan struct{}, 10), // HACK: This is to avoid the current deadlock
+		sendQueue:        make(chan []byte, 256),
 	}
-	// Rate limiting requires a go-routine to actually do the sending
-	go chatbot.sender()
-
+	chatbot.init(mockSocket)
 	conf := map[string]string{
 		"nick": "test", "password": "testxyz", "server": "localhost"}
-	channels := []string{"#test", NEW_CHANNEL}
+	channels = append(channels, &NEW_CHANNEL)
 	newConfig := &common.BotConfig{Id: 1, Config: conf, Channels: channels}
 
+	// TODO (yml) there is probably better than sleeping but we need to wait
+	// until chatbot is fully ready
+	time.Sleep(time.Second * 2)
 	chatbot.Update(newConfig)
-
-	// Wait a bit
-	for i := 0; i < 10; i++ {
-		time.Sleep(time.Second / 3)
-		if len(mockSocket.received) >= 1 {
-			break
-		}
-	}
-
-	// Expect a JOIN of NEW_CHANNEL but NOT a JOIN on #test (because already in there)
 	isFound := false
-	for _, cmd := range mockSocket.received {
-
-		cmd = strings.TrimSpace(cmd)
-
-		if cmd == "JOIN "+NEW_CHANNEL {
+	for received := range mockSocket.Receiver {
+		glog.Infoln("[DEBUG] received", received)
+		if strings.TrimSpace(received) == "JOIN "+NEW_CHANNEL.Credential() {
 			isFound = true
-			break
-		}
-
-		if cmd == "JOIN #test" {
+			close(mockSocket.Receiver)
+		} else if received == "JOIN #test" {
 			t.Error("Should not rejoin channels already in, can cause flood")
 		}
 	}
-
 	if !isFound {
-		t.Error("Expected JOIN " + NEW_CHANNEL)
+		t.Error("Expected JOIN " + NEW_CHANNEL.Credential())
 	}
 }
 
 func TestToUnicodeUTF8(t *testing.T) {
+	common.SetGlogFlags()
 	msg := "ελληνικά"
 	result := toUnicode([]byte(msg))
 	if result != msg {
@@ -276,6 +259,7 @@ func TestToUnicodeUTF8(t *testing.T) {
 }
 
 func TestToUnicodeLatin1(t *testing.T) {
+	common.SetGlogFlags()
 	msg := "âôé"
 	latin1_bytes := []byte{0xe2, 0xf4, 0xe9}
 	result := toUnicode(latin1_bytes)
@@ -285,6 +269,7 @@ func TestToUnicodeLatin1(t *testing.T) {
 }
 
 func TestSplitChannels(t *testing.T) {
+	common.SetGlogFlags()
 	input := "#aone, #btwo, #cthree"
 	result := splitChannels(input)
 	if len(result) != 3 || result[2] != "#cthree" {
