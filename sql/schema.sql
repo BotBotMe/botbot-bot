@@ -7,7 +7,8 @@ CREATE TABLE "bots_chatbot" (
     "server_password" varchar(100),
     "nick" varchar(64) NOT NULL,
     "password" varchar(100),
-    "real_name" varchar(250) NOT NULL
+    "real_name" varchar(250) NOT NULL,
+    "server_identifier" varchar(164)
 )
 ;
 CREATE TABLE "bots_channel" (
@@ -18,7 +19,9 @@ CREATE TABLE "bots_channel" (
     "password" varchar(250),
     "is_public" boolean NOT NULL,
     "is_active" boolean NOT NULL,
-    "is_featured" boolean NOT NULL
+    "is_featured" boolean NOT NULL,
+    "fingerprint" varchar(36),
+    "status" varchar(20)
 )
 ;
 CREATE TABLE "bots_usercount" (
