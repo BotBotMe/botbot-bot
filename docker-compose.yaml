@@ -1,0 +1,23 @@
+bot:
+  build: .
+  links:
+    - redis
+    - db
+  volumes:
+    - ./:/go/src/github.com/BotBotMe/botbot-bot/
+
+redis:
+  image: redis:latest
+  ports:
+    - 6379
+
+db:
+  image: postgres:9.5
+  ports:
+    - "5432:5432"
+  volumes:
+      - ./init-db:/docker-entrypoint-initdb.d/
+      - ./sql:/pg-tmp/
+  environment:
+    POSTGRES_PASSWORD: docker
+    POSTGRES_USER: postgres
