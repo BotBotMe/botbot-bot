@@ -2,6 +2,7 @@ package common
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"time"
 
@@ -56,11 +57,25 @@ type PostgresStorage struct {
 // Connect to the database.
 func NewPostgresStorage() *PostgresStorage {
 	postgresUrlString := os.Getenv("STORAGE_URL")
+
 	if glog.V(2) {
 		glog.Infoln("postgresUrlString: ", postgresUrlString)
 	}
 	if postgresUrlString == "" {
-		glog.Fatal("STORAGE_URL cannot be empty.\nexport STORAGE_URL=postgres://user:password@host:port/db_name")
+
+		// Try to make the connection string from docker links
+		if os.Getenv("DB_ENV_POSTGRES_USER") != "" {
+			glog.Infoln("STORAGE_URL not in the environment. Try to create from docker links.")
+
+			postgresUrlString = fmt.Sprintf("postgres://%s:%s@%s:%s/botbot",
+				os.Getenv("DB_ENV_POSTGRES_USER"),
+				os.Getenv("DB_ENV_POSTGRES_PASSWORD"),
+				os.Getenv("DB_PORT_5432_TCP_ADDR"),
+				os.Getenv("DB_PORT_5432_TCP_PORT"),
+			)
+		} else {
+			glog.Fatal("STORAGE_URL cannot be empty.\nexport STORAGE_URL=postgres://user:password@host:port/db_name")
+		}
 	}
 	dataSource, err := pq.ParseURL(postgresUrlString)
 	if err != nil {

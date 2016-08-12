@@ -9,10 +9,10 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/BotBotMe/botbot-bot/botbot"
 	"github.com/BotBotMe/botbot-bot/common"
 	"github.com/golang/glog"
 	_ "net/http/pprof"
-
 )
 
 const (
@@ -29,13 +29,13 @@ func main() {
 
 	queue := common.NewRedisQueue()
 
-	botbot := NewBotBot(storage, queue)
+	bot := botbot.NewBotBot(storage, queue)
 
 	// Listen for incoming commands
-	go botbot.listen(LISTEN_QUEUE_PREFIX)
+	go bot.Listen(LISTEN_QUEUE_PREFIX)
 
 	// Start the main loop
-	go botbot.mainLoop()
+	go bot.MainLoop()
 
 	// Start and http server to serve the stats from expvar
 	log.Fatal(http.ListenAndServe(":3030", nil))
@@ -48,7 +48,7 @@ func main() {
 	for {
 		<-kill
 		glog.Infoln("Graceful shutdown")
-		botbot.shutdown()
+		bot.Shutdown()
 		break
 	}
 

@@ -1,6 +1,7 @@
 package common
 
 import (
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -109,7 +110,17 @@ type RedisQueue struct {
 func NewRedisQueue() Queue {
 	redisUrlString := os.Getenv("REDIS_PLUGIN_QUEUE_URL")
 	if redisUrlString == "" {
-		glog.Fatal("REDIS_PLUGIN_QUEUE_URL cannot be empty.\nexport REDIS_PLUGIN_QUEUE_URL=redis://host:port/db_number")
+
+		// try to connect via docker links if they exist.
+		if os.Getenv("REDIS_PORT_6379_TCP_ADDR") != "" {
+			redisUrlString = fmt.Sprintf("redis://%s:%s/0",
+				os.Getenv("REDIS_PORT_6379_TCP_ADDR"),
+				os.Getenv("REDIS_PORT_6379_TCP_PORT"),
+			)
+		} else {
+			glog.Fatal("REDIS_PLUGIN_QUEUE_URL cannot be empty.\nexport REDIS_PLUGIN_QUEUE_URL=redis://host:port/db_number")
+
+		}
 	}
 	redisUrl, err := url.Parse(redisUrlString)
 	if err != nil {

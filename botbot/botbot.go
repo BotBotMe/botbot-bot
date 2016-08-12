@@ -1,4 +1,4 @@
-package main
+package botbot
 
 import (
 	"strconv"
@@ -52,7 +52,7 @@ func NewBotBot(storage common.Storage, queue common.Queue) *BotBot {
 }
 
 // Listen for incoming commands
-func (bot *BotBot) listen(queueName string) {
+func (bot *BotBot) Listen(queueName string) {
 
 	var msg []byte
 	var err error
@@ -71,7 +71,7 @@ func (bot *BotBot) listen(queueName string) {
 	}
 }
 
-func (bot *BotBot) mainLoop() {
+func (bot *BotBot) MainLoop() {
 	// TODO (yml) comment out bot.recordUserCounts because I think it is
 	// leaking postgres connection.
 	//go bot.recordUserCounts()
@@ -169,6 +169,6 @@ func (bot *BotBot) recordUserCounts() {
 }
 
 // Stop
-func (bot *BotBot) shutdown() {
+func (bot *BotBot) Shutdown() {
 	bot.netMan.Shutdown()
 }
