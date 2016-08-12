@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BotBotMe/botbot-bot/botbot"
 	"github.com/BotBotMe/botbot-bot/common"
 	"github.com/golang/glog"
 )
@@ -41,9 +42,9 @@ func TestBotBotIRC(t *testing.T) {
 
 	// Run BotBot
 	time.Sleep(time.Second) // Sleep of one second to avoid the 5s backoff
-	botbot := NewBotBot(storage, queue)
-	go botbot.listen("testcmds")
-	go botbot.mainLoop()
+	bot := botbot.NewBotBot(storage, queue)
+	go bot.Listen("testcmds")
+	go bot.MainLoop()
 	waitForServer(server, 4)
 
 	// this sleep allow us to keep the answer in the right order
@@ -84,7 +85,7 @@ func TestBotBotIRC(t *testing.T) {
 
 	// test shutdown - should probably be separate test
 
-	botbot.shutdown()
+	bot.Shutdown()
 
 	tries = 0
 	val := 5
