@@ -546,10 +546,13 @@ func (bot *ircBot) sendPassword() {
 
 func (bot *ircBot) sendSaslStart() {
 	bot.SendRaw("AUTHENTICATE PLAIN")
+
+}
+
+func (bot *ircBot) sendSaslPass() {
 	out := bytes.Join([][]byte{[]byte(bot.nick), []byte(bot.nick), []byte(bot.password)}, []byte{0})
 	encpass := base64.StdEncoding.EncodeToString(out)
 	bot.SendRaw("AUTHENTICATE " + encpass)
-	bot.SendRaw("AUTHENTICATE +")
 }
 
 func (bot *ircBot) sendSaslEnd() {
@@ -614,6 +617,12 @@ func (bot *ircBot) act(theLine *line.Line) {
 	isAskingForSasl := theLine.User == "" && strings.HasSuffix(theLine.Raw, " CAP * ACK :sasl")
 	if isAskingForSasl {
 		bot.sendSaslStart()
+		return
+	}
+
+	isAskingForSaslPass := theLine.User == "" && theLine.Raw == "AUTHENTICATE +"
+	if isAskingForSaslPass {
+		bot.sendSaslPass()
 		return
 	}
 
