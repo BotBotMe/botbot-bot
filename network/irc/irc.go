@@ -619,7 +619,7 @@ func (bot *ircBot) act(theLine *line.Line) {
 		return
 	}
 
-	isAskingForSaslPass := theLine.User == "" && strings.ToUpper(theLine.Command) == "AUTHENTICATE" && theLine.Args[0] == "+"
+	isAskingForSaslPass := theLine.User == "" && strings.ToUpper(theLine.Command) == "AUTHENTICATE" && len(theLine.Args) == 1 && theLine.Args[0] == "+"
 	if isAskingForSaslPass {
 		bot.sendSaslPass()
 		return
