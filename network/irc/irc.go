@@ -10,8 +10,10 @@ package irc
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"expvar"
 	"fmt"
 	"io"
@@ -525,6 +527,7 @@ func (bot *ircBot) login() {
 
 	bot.isAuthenticating = true
 
+	bot.SendRaw("CAP REQ :sasl")
 	// We use the botname as the 'realname', because bot's don't have real names!
 	bot.SendRaw("USER " + bot.nick + " 0 * :" + bot.realname)
 
@@ -539,6 +542,20 @@ func (bot *ircBot) setNick() {
 // Tell NickServ our password
 func (bot *ircBot) sendPassword() {
 	bot.Send("NickServ", "identify "+bot.password)
+}
+
+func (bot *ircBot) sendSaslStart() {
+	bot.SendRaw("AUTHENTICATE PLAIN")
+}
+
+func (bot *ircBot) sendSaslPass() {
+	out := bytes.Join([][]byte{[]byte(bot.nick), []byte(bot.nick), []byte(bot.password)}, []byte{0})
+	encpass := base64.StdEncoding.EncodeToString(out)
+	bot.SendRaw("AUTHENTICATE " + encpass)
+}
+
+func (bot *ircBot) sendSaslEnd() {
+	bot.SendRaw("CAP END")
 }
 
 // Read from the conn
@@ -593,6 +610,29 @@ func (bot *ircBot) act(theLine *line.Line) {
 		bot.isConnecting = false
 		bot.Unlock()
 		bot.login()
+		return
+	}
+
+	isAskingForSasl := strings.ToUpper(theLine.Command) == "CAP" && len(theLine.Args) == 2 && strings.ToUpper(theLine.Args[1]) == "ACK" && theLine.Content == "sasl"
+	if isAskingForSasl {
+		bot.sendSaslStart()
+		return
+	}
+
+	isAskingForSaslPass := theLine.User == "" && strings.ToUpper(theLine.Command) == "AUTHENTICATE" && theLine.Args[0] == "+"
+	if isAskingForSaslPass {
+		bot.sendSaslPass()
+		return
+	}
+
+	isSaslConfirm := theLine.User == "" && theLine.Command == "903"
+	// After SASL is accepted, join all the channels
+	if isSaslConfirm {
+		bot.sendSaslEnd()
+		bot.Lock()
+		bot.isAuthenticating = false
+		bot.Unlock()
+		bot.JoinAll()
 		return
 	}
 

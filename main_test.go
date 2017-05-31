@@ -70,12 +70,12 @@ func TestBotBotIRC(t *testing.T) {
 
 	// Check IRC server expectations
 
-	if server.GotLength() != 6 {
-		t.Fatal("Expected exactly 6 IRC messages from the bot. Got ", server.GotLength())
+	if server.GotLength() != 7 {
+		t.Fatal("Expected exactly 7 IRC messages from the bot. Got ", server.GotLength())
 	}
 
 	glog.Infoln("[Debug] server.Got", server.Got)
-	expect := []string{"PING", "USER", "NICK", "NickServ", "JOIN", "PRIVMSG"}
+	expect := []string{"PING", "CAP", "USER", "NICK", "NickServ", "JOIN", "PRIVMSG"}
 	for i := 0; i < 5; i++ {
 		if !strings.Contains(string(server.Got[i]), expect[i]) {
 			t.Error("Line ", i, " did not contain ", expect[i], ". It is: ", server.Got[i])
