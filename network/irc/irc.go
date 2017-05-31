@@ -546,7 +546,6 @@ func (bot *ircBot) sendPassword() {
 
 func (bot *ircBot) sendSaslStart() {
 	bot.SendRaw("AUTHENTICATE PLAIN")
-
 }
 
 func (bot *ircBot) sendSaslPass() {
@@ -614,19 +613,19 @@ func (bot *ircBot) act(theLine *line.Line) {
 		return
 	}
 
-	isAskingForSasl := theLine.User == "" && strings.HasSuffix(theLine.Raw, " CAP * ACK :sasl")
+	isAskingForSasl := strings.ToUpper(theLine.Command) == "CAP" && len(theLine.Args) == 2 && strings.ToUpper(theLine.Args[1]) == "ACK" && theLine.Content == "sasl"
 	if isAskingForSasl {
 		bot.sendSaslStart()
 		return
 	}
 
-	isAskingForSaslPass := theLine.User == "" && theLine.Raw == "AUTHENTICATE +"
+	isAskingForSaslPass := theLine.User == "" && strings.ToUpper(theLine.Command) == "AUTHENTICATE" && theLine.Args[0] == "+"
 	if isAskingForSaslPass {
 		bot.sendSaslPass()
 		return
 	}
 
-	isSaslConfirm := theLine.User == "" && theLine.Content == "SASL authentication successful"
+	isSaslConfirm := theLine.User == "" && theLine.Command == "903"
 	// After SASL is accepted, join all the channels
 	if isSaslConfirm {
 		bot.sendSaslEnd()
