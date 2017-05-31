@@ -619,6 +619,12 @@ func (bot *ircBot) act(theLine *line.Line) {
 		return
 	}
 
+	isRefusingSasl := strings.ToUpper(theLine.Command) == "CAP" && len(theLine.Args) == 2 && strings.ToUpper(theLine.Args[1]) == "NAK"
+	if isRefusingSasl {
+		bot.sendSaslEnd()
+		return
+	}
+
 	isAskingForSaslPass := theLine.User == "" && strings.ToUpper(theLine.Command) == "AUTHENTICATE" && len(theLine.Args) == 1 && theLine.Args[0] == "+"
 	if isAskingForSaslPass {
 		bot.sendSaslPass()
