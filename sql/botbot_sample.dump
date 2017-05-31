@@ -2,14 +2,14 @@
 -- Data for Name: bots_chatbot; Type: TABLE DATA; Schema: public; Owner: botbot
 --
 
-COPY bots_chatbot (id, connection, is_active, server, server_password, password, real_name, nick) FROM stdin WITH CSV;
-1,"nick=>botbot-test1,server=>chat.freenode.net:6697,password=>secret-password,realname=>https://botbot.me",t,chat.freenode.net:6697,,secret-password,https://botbot.me,botbot-test1
+COPY bots_chatbot (id, is_active, server, server_password, server_identifier, password, real_name, nick, slug, max_channels) FROM stdin WITH CSV;
+1,t,chat.freenode.net:6697,,chat-freenode-net-6697.botbot-test1,secret-password,https://botbot.me,botbot-test1,freenode,200
 \.
 
 --
 -- Data for Name: bots_channel; Type: TABLE DATA; Schema: public; Owner: botbot
 --
 
-COPY bots_channel (id, chatbot_id, name, slug, is_public, is_active, password, is_featured) FROM stdin WITH CSV;
-1,1,#botbot-test,botbot-test,t,t,\n,f
+COPY bots_channel (id, created, updated, name, slug, private_slug, password, is_public, is_featured, fingerprint, public_kudos, notes, chatbot_id, status) FROM stdin WITH CSV;
+1,2017-05-30 14:48:10.559787-06,2017-05-30 15:47:48.704735-06,#botbot-test,botbot-test,,"",t,f,e193ef0f-aeae-4aa6-a17f-82897fa4c9c8,t,"",1,ACTIVE
 \.
