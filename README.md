@@ -1,4 +1,5 @@
-[![Build Status](https://travis-ci.org/BotBotMe/botbot-bot.png)](https://travis-ci.org/BotBotMe/botbot-bot)
+[![Build Status](https://img.shields.io/circleci/project/github/BotBotMe/botbot-bot.svg)](https://circleci.com/gh/BotBotMe/botbot-bot)
+
 
 The bot used in botbot.me is a Go (1.2+) program. To install:
 

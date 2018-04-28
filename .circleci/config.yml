@@ -1,0 +1,32 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: golang:1.10
+
+    working_directory: /go/src/github.com/BotBotMe/botbot-bot
+
+    steps:
+      - checkout
+      - run:
+          name: Get Dependencies
+          command: go get -v .
+      - run:
+          name: Test
+          command: go test -v -race ./...
+      - run:
+          name: Build
+          command: |
+              go build -v .
+              sha256sum botbot-bot
+      - store_artifacts:
+          path: botbot-bot
+          prefix: bin
+      - run:
+          name: Push to S3
+          branches:
+            only:
+              - master
+          command: |
+            apt-get update -q && apt-get install -y awscli
+            aws s3 cp botbot-bot s3://${S3_BUCKET}/
