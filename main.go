@@ -22,7 +22,10 @@ const (
 
 func main() {
 	flag.Parse()
+
 	glog.Infoln("START. Use 'botbot -help' for command line options.")
+	glog.Infoln("STORAGE_URL: ", os.Getenv("STORAGE_URL"))
+	glog.Infoln("REDIS_PLUGIN_QUEUE_URL: ", os.Getenv("REDIS_PLUGIN_QUEUE_URL"))
 
 	storage := common.NewPostgresStorage()
 	defer storage.Close()
